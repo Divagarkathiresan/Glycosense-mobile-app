@@ -1,0 +1,142 @@
+{
+  "sample_risk_assessments": [
+    {
+      "date": "2024-01-15",
+      "glucose_value": 95,
+      "measurement_context": "fasting",
+      "trend": "stable",
+      "symptoms": "none",
+      "medication_type": "none",
+      "meal_type": "none",
+      "diabetes_status": "no_diabetes",
+      "age": 35,
+      "weight_kg": 70,
+      "height_cm": 170,
+      "family_history": false,
+      "physical_activity": "moderate"
+    },
+    {
+      "date": "2024-01-20",
+      "glucose_value": 110,
+      "measurement_context": "post_meal",
+      "trend": "rising",
+      "symptoms": "none",
+      "medication_type": "none",
+      "meal_type": "high_carb",
+      "diabetes_status": "no_diabetes",
+      "age": 35,
+      "weight_kg": 70,
+      "height_cm": 170,
+      "family_history": false,
+      "physical_activity": "moderate"
+    },
+    {
+      "date": "2024-01-25",
+      "glucose_value": 88,
+      "measurement_context": "fasting",
+      "trend": "stable",
+      "symptoms": "none",
+      "medication_type": "none",
+      "meal_type": "none",
+      "diabetes_status": "no_diabetes",
+      "age": 35,
+      "weight_kg": 70,
+      "height_cm": 170,
+      "family_history": false,
+      "physical_activity": "high"
+    },
+    {
+      "date": "2024-02-01",
+      "glucose_value": 125,
+      "measurement_context": "post_meal",
+      "trend": "rising",
+      "symptoms": "mild_thirst",
+      "medication_type": "none",
+      "meal_type": "high_carb",
+      "diabetes_status": "prediabetes",
+      "age": 35,
+      "weight_kg": 72,
+      "height_cm": 170,
+      "family_history": false,
+      "physical_activity": "low"
+    },
+    {
+      "date": "2024-02-10",
+      "glucose_value": 102,
+      "measurement_context": "fasting",
+      "trend": "stable",
+      "symptoms": "none",
+      "medication_type": "none",
+      "meal_type": "none",
+      "diabetes_status": "prediabetes",
+      "age": 35,
+      "weight_kg": 71,
+      "height_cm": 170,
+      "family_history": false,
+      "physical_activity": "moderate"
+    },
+    {
+      "date": "2024-02-15",
+      "glucose_value": 140,
+      "measurement_context": "post_meal",
+      "trend": "rising",
+      "symptoms": "mild_thirst",
+      "medication_type": "none",
+      "meal_type": "high_carb",
+      "diabetes_status": "prediabetes",
+      "age": 35,
+      "weight_kg": 71,
+      "height_cm": 170,
+      "family_history": true,
+      "physical_activity": "low"
+    },
+    {
+      "date": "2024-02-20",
+      "glucose_value": 98,
+      "measurement_context": "fasting",
+      "trend": "falling",
+      "symptoms": "none",
+      "medication_type": "none",
+      "meal_type": "none",
+      "diabetes_status": "prediabetes",
+      "age": 35,
+      "weight_kg": 70,
+      "height_cm": 170,
+      "family_history": true,
+      "physical_activity": "high"
+    },
+    {
+      "date": "2024-02-25",
+      "glucose_value": 115,
+      "measurement_context": "post_meal",
+      "trend": "stable",
+      "symptoms": "none",
+      "medication_type": "none",
+      "meal_type": "balanced",
+      "diabetes_status": "prediabetes",
+      "age": 35,
+      "weight_kg": 69,
+      "height_cm": 170,
+      "family_history": true,
+      "physical_activity": "moderate"
+    }
+  ],
+  "curl_examples": [
+    {
+      "description": "Login first to get token",
+      "command": "curl -X POST http://192.168.0.6:8080/login -H 'Content-Type: application/json' -d '{\"email\":\"your@email.com\",\"password\":\"yourpassword\"}'"
+    },
+    {
+      "description": "Submit risk assessment (replace YOUR_TOKEN with actual token)",
+      "command": "curl -X POST http://192.168.0.6:8080/diabetes-risk -H 'Content-Type: application/json' -H 'Authorization: Bearer YOUR_TOKEN' -d '{\"glucose_value\":95,\"measurement_context\":\"fasting\",\"trend\":\"stable\",\"symptoms\":\"none\",\"medication_type\":\"none\",\"meal_type\":\"none\",\"diabetes_status\":\"no_diabetes\",\"age\":35,\"weight_kg\":70,\"height_cm\":170,\"family_history\":false,\"physical_activity\":\"moderate\"}'"
+    },
+    {
+      "description": "Get all metrics",
+      "command": "curl -X GET http://192.168.0.6:8080/user-metrics -H 'Authorization: Bearer YOUR_TOKEN'"
+    },
+    {
+      "description": "Get latest risk",
+      "command": "curl -X GET http://192.168.0.6:8080/diabetes-risk/latest -H 'Authorization: Bearer YOUR_TOKEN'"
+    }
+  ]
+}
