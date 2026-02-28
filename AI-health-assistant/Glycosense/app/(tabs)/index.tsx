@@ -9,16 +9,27 @@ import {
   View,
 } from 'react-native';
 import { Link } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/context/auth';
 
-type Metric = {
+type RiskHistoryItem = {
+  record_id: number;
+  created_at?: string | null;
+  glucose_value?: number | null;
+  weight_kg?: number | null;
+  bmi?: number | null;
+  risk_score?: number | null;
+  risk_level?: string | null;
+};
+
+type UserMetricItem = {
   metric_id: number;
-  disease_type: string;
   created_at?: string;
-  timestamp?: number;
   glucose_value?: number;
+  weight_kg?: number;
+  height_cm?: number;
 };
 
 type LatestRisk = {
@@ -32,42 +43,39 @@ type ChartPoint = {
   y: number;
 };
 
-function getMetricTime(metric: Metric) {
-  if (typeof metric.timestamp === 'number') return metric.timestamp;
-  if (metric.created_at) return new Date(metric.created_at).getTime();
-  return 0;
-}
+type ChartDatum = {
+  value: number;
+  date: string;
+  glucose?: number;
+  bmi?: number;
+  weight?: number;
+  riskScore?: number;
+};
 
-function LineChart({ values }: { values: number[] }) {
+function LineChart({ data }: { data: ChartDatum[] }) {
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
-  const points = useMemo<ChartPoint[]>(() => {
-    if (values.length === 0 || size.width === 0 || size.height === 0) return [];
-    const padding = 16;
+  const { points, minValue, maxValue } = useMemo(() => {
+    if (data.length === 0 || size.width === 0 || size.height === 0) 
+      return { points: [], minValue: 0, maxValue: 0 };
+    
+    const padding = 40;
     const width = Math.max(size.width - padding * 2, 1);
     const height = Math.max(size.height - padding * 2, 1);
+    const values = data.map((d) => d.value);
     const min = Math.min(...values);
     const max = Math.max(...values);
     const range = max - min || 1;
 
-    return values.map((value, index) => {
+    const pts = values.map((value, index) => {
       const x = padding + (index / Math.max(values.length - 1, 1)) * width;
       const y = padding + (1 - (value - min) / range) * height;
       return { x, y };
     });
-  }, [values, size]);
 
-  const segments = useMemo(() => {
-    if (points.length < 2) return [];
-    return points.slice(1).map((point, index) => {
-      const prev = points[index];
-      const dx = point.x - prev.x;
-      const dy = point.y - prev.y;
-      const length = Math.sqrt(dx * dx + dy * dy);
-      const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
-      return { left: prev.x, top: prev.y, length, angle };
-    });
-  }, [points]);
+    return { points: pts, minValue: min, maxValue: max };
+  }, [data, size]);
 
   return (
     <View
@@ -77,33 +85,96 @@ function LineChart({ values }: { values: number[] }) {
         setSize({ width, height });
       }}
     >
-      <View style={styles.chartAxis} />
-      {segments.map((segment, index) => (
-        <View
-          key={`seg-${index}`}
-          style={[
-            styles.chartLine,
-            {
-              left: segment.left,
-              top: segment.top,
-              width: segment.length,
-              transform: [{ rotate: `${segment.angle}deg` }],
-            },
-          ]}
-        />
-      ))}
-      {points.map((point, index) => (
-        <View
-          key={`pt-${index}`}
-          style={[
-            styles.chartDot,
-            {
-              left: point.x - 3,
-              top: point.y - 3,
-            },
-          ]}
-        />
-      ))}
+      <View style={styles.chartGrid}>
+        <View style={styles.gridLine} />
+        <View style={styles.gridLine} />
+        <View style={styles.gridLine} />
+      </View>
+      
+      {points.length > 1 && (
+        <>
+          {points.slice(0, -1).map((point, index) => {
+            const next = points[index + 1];
+            const dx = next.x - point.x;
+            const dy = next.y - point.y;
+            const length = Math.sqrt(dx * dx + dy * dy);
+            const angle = Math.atan2(dy, dx);
+            return (
+              <View
+                key={`line-${index}`}
+                style={{
+                  position: 'absolute',
+                  left: point.x,
+                  top: point.y,
+                  width: length,
+                  height: 3,
+                  backgroundColor: '#0EA5A4',
+                  transform: [{ rotate: `${angle}rad` }],
+                }}
+              />
+            );
+          })}
+          {points.map((point, index) => (
+            <Pressable
+              key={`dot-${index}`}
+              style={[styles.chartDot, { left: point.x - 5, top: point.y - 5 }]}
+              onPress={() => setActiveIndex(activeIndex === index ? null : index)}
+            >
+              <View style={styles.chartDotInner} />
+            </Pressable>
+          ))}
+        </>
+      )}
+
+      {activeIndex !== null && points[activeIndex] ? (
+        (() => {
+          const point = points[activeIndex];
+          const datum = data[activeIndex];
+          const tooltipWidth = 170;
+          const left = Math.min(
+            Math.max(point.x - tooltipWidth / 2, 8),
+            Math.max(size.width - tooltipWidth - 8, 8)
+          );
+          const top = point.y < 60 ? point.y + 18 : point.y - 70;
+          return (
+            <View style={[styles.tooltip, { left, top }]}>
+              <Text style={styles.tooltipTitle}>{datum.date}</Text>
+              <Text style={styles.tooltipText}>Glucose: {datum.glucose ?? '—'} mg/dL</Text>
+              <Text style={styles.tooltipText}>BMI: {datum.bmi ?? '—'}</Text>
+              <Text style={styles.tooltipText}>Weight: {datum.weight ?? '—'} kg</Text>
+              <Text style={styles.tooltipText}>Risk: {datum.riskScore ?? '—'}</Text>
+            </View>
+          );
+        })()
+      ) : null}
+      
+      {minValue > 0 && maxValue > 0 && (
+        <>
+          <Text style={[styles.yAxisLabel, { top: 20 }]}>{Math.round(maxValue)}</Text>
+          <Text style={[styles.yAxisLabel, { bottom: 20 }]}>{Math.round(minValue)}</Text>
+        </>
+      )}
+
+      {points.length > 0 && (
+        <View style={styles.xAxisLabels}>
+          {points.map((point, index) => {
+            const showLabel = data.length <= 6 || index % 2 === 0 || index === data.length - 1;
+            if (!showLabel) return null;
+            return (
+              <Text
+                key={`x-${index}`}
+                style={[
+                  styles.xAxisLabel,
+                  { left: point.x - 18 }
+                ]}
+                numberOfLines={1}
+              >
+                {data[index]?.date}
+              </Text>
+            );
+          })}
+        </View>
+      )}
     </View>
   );
 }
@@ -111,25 +182,72 @@ function LineChart({ values }: { values: number[] }) {
 export default function HomeScreen() {
   const { user, token, logout } = useAuth();
   const [optionsOpen, setOptionsOpen] = useState(false);
-  const [metrics, setMetrics] = useState<Metric[]>([]);
-  const [metricsError, setMetricsError] = useState<string | null>(null);
+  const [riskHistory, setRiskHistory] = useState<RiskHistoryItem[]>([]);
+  const [riskHistoryError, setRiskHistoryError] = useState<string | null>(null);
   const [latestRisk, setLatestRisk] = useState<LatestRisk | null>(null);
+  const [useRiskHistoryEndpoint, setUseRiskHistoryEndpoint] = useState(true);
 
-  const loadMetrics = useCallback(async () => {
+  const loadRiskHistory = useCallback(async () => {
     if (!token) return;
-    setMetricsError(null);
+    setRiskHistoryError(null);
     try {
-      const data = await apiFetch<Metric[]>('/user-metrics', { token });
-      const sorted = [...data].sort((a, b) => getMetricTime(a) - getMetricTime(b));
-      setMetrics(sorted);
+      if (useRiskHistoryEndpoint) {
+        const data = await apiFetch<RiskHistoryItem[]>('/diabetes-risk/history', { token });
+        const sorted = [...data].filter((item) => item.created_at).sort((a, b) => {
+          const at = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const bt = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return at - bt;
+        });
+        setRiskHistory(sorted);
+        return;
+      }
+      throw new Error('History endpoint disabled');
     } catch (err: any) {
-      setMetricsError(err.message ?? 'Failed to load metrics');
+      setUseRiskHistoryEndpoint(false);
+      const message = err?.message ?? 'Failed to load history';
+      try {
+        const metrics = await apiFetch<UserMetricItem[]>('/user-metrics', { token });
+        const sorted = [...metrics].filter((item) => item.created_at).sort((a, b) => {
+          const at = item.created_at ? new Date(item.created_at).getTime() : 0;
+          const bt = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return at - bt;
+        });
+        const mapped: RiskHistoryItem[] = sorted.map((item) => {
+          let bmi: number | null = null;
+          if (item.weight_kg && item.height_cm) {
+            const h = item.height_cm / 100;
+            bmi = Number.isFinite(h) && h > 0 ? Math.round((item.weight_kg / (h * h)) * 10) / 10 : null;
+          }
+          return {
+            record_id: item.metric_id,
+            created_at: item.created_at ?? null,
+            glucose_value: item.glucose_value ?? null,
+            weight_kg: item.weight_kg ?? null,
+            bmi,
+            risk_score: null,
+            risk_level: null,
+          };
+        });
+        setRiskHistory(mapped);
+        setRiskHistoryError(null);
+        return;
+      } catch (fallbackErr: any) {
+        setRiskHistoryError(fallbackErr?.message ?? message);
+        setRiskHistory([]);
+        return;
+      }
     }
-  }, [token]);
+  }, [token, useRiskHistoryEndpoint]);
 
   useEffect(() => {
-    if (token) loadMetrics();
-  }, [token, loadMetrics]);
+    if (!token) {
+      setRiskHistory([]);
+      setRiskHistoryError(null);
+      setLatestRisk(null);
+      return;
+    }
+    loadRiskHistory();
+  }, [token, loadRiskHistory]);
 
   const loadLatestRisk = useCallback(async () => {
     if (!token) return;
@@ -141,24 +259,38 @@ export default function HomeScreen() {
     }
   }, [token]);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (!token) return;
+      loadRiskHistory();
+      loadLatestRisk();
+    }, [token, loadRiskHistory, loadLatestRisk])
+  );
+
   useEffect(() => {
     if (token) loadLatestRisk();
   }, [token, loadLatestRisk]);
 
   const latestGlucose = useMemo(() => {
-    const last = [...metrics].reverse().find((item) => typeof item.glucose_value === 'number');
+    const last = [...riskHistory].reverse().find((item) => typeof item.glucose_value === 'number');
     return typeof last?.glucose_value === 'number' ? last.glucose_value : null;
-  }, [metrics]);
+  }, [riskHistory]);
 
   const glucoseData = useMemo(() => {
-    const filtered = metrics
+    const filtered = riskHistory
       .filter((item) => typeof item.glucose_value === 'number')
       .slice(-10);
     return filtered.map((item) => ({
       value: item.glucose_value as number,
-      date: item.created_at ? new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''
+      glucose: item.glucose_value ?? undefined,
+      bmi: item.bmi ?? undefined,
+      weight: item.weight_kg ?? undefined,
+      riskScore: item.risk_score ?? undefined,
+      date: item.created_at
+        ? new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        : ''
     }));
-  }, [metrics]);
+  }, [riskHistory]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -211,20 +343,12 @@ export default function HomeScreen() {
               <Text style={styles.chartAxisLabel}>Glucose Trend</Text>
             </View>
             {glucoseData.length > 1 ? (
-              <LineChart values={glucoseData.map(d => d.value)} />
+              <LineChart data={glucoseData} />
             ) : (
               <View style={styles.chartEmpty}>
                 <Text style={styles.chartEmptyText}>
-                  {metricsError ? metricsError : 'Add glucose metrics to see trends.'}
+                  {riskHistoryError ? riskHistoryError : 'Add glucose metrics to see trends.'}
                 </Text>
-              </View>
-            )}
-            {glucoseData.length > 0 && (
-              <View style={styles.chartLabels}>
-                <Text style={styles.chartLabel}>{glucoseData[0]?.date}</Text>
-                {glucoseData.length > 1 && (
-                  <Text style={styles.chartLabel}>{glucoseData[glucoseData.length - 1]?.date}</Text>
-                )}
               </View>
             )}
           </View>
@@ -416,48 +540,119 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   chartCard: {
-    backgroundColor: '#F8FFFB',
-    borderRadius: 22,
-    padding: 16,
-    minHeight: 240,
-    borderWidth: 1,
-    borderColor: '#CDEFD8',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    minHeight: 280,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
   chartHeader: {
     flexDirection: 'row',
-    justifyContent: 'flex-start',
-    marginBottom: 8,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   chartAxisLabel: {
-    fontSize: 14,
-    color: '#3B7C5B',
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1B4332',
   },
   chartPlot: {
-    flex: 1,
-    minHeight: 160,
+    height: 180,
     backgroundColor: '#F8FFFB',
     borderRadius: 16,
+    position: 'relative',
+    marginBottom: 12,
   },
-  chartAxis: {
+  chartGrid: {
     position: 'absolute',
-    left: 16,
-    top: 16,
-    bottom: 24,
-    width: 1,
-    backgroundColor: '#3B7C5B',
-    opacity: 0.6,
+    left: 40,
+    right: 40,
+    top: 40,
+    bottom: 40,
+    justifyContent: 'space-between',
+  },
+  gridLine: {
+    height: 1,
+    backgroundColor: '#E0E0E0',
+    opacity: 0.5,
   },
   chartLine: {
     position: 'absolute',
-    height: 2,
-    backgroundColor: '#2D6A4F',
+    height: 3,
+    backgroundColor: '#0EA5A4',
+    borderRadius: 2,
   },
   chartDot: {
     position: 'absolute',
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#2D6A4F',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 3,
+    borderColor: '#0EA5A4',
+    shadowColor: '#0EA5A4',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  chartDotInner: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#0EA5A4',
+  },
+  yAxisLabel: {
+    position: 'absolute',
+    left: 8,
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  xAxisLabels: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 10,
+    height: 16,
+  },
+  xAxisLabel: {
+    position: 'absolute',
+    width: 36,
+    textAlign: 'center',
+    fontSize: 10,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  tooltip: {
+    position: 'absolute',
+    width: 170,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#CDEFD8',
+    shadowColor: '#1B4332',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  tooltipTitle: {
+    fontSize: 11,
+    color: '#1B4332',
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  tooltipText: {
+    fontSize: 11,
+    color: '#3B7C5B',
   },
   chartEmpty: {
     flex: 1,
@@ -468,17 +663,6 @@ const styles = StyleSheet.create({
   chartEmptyText: {
     color: '#4F856A',
     textAlign: 'center',
-  },
-  chartLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 12,
-    paddingHorizontal: 8,
-  },
-  chartLabel: {
-    fontSize: 12,
-    color: '#3B7C5B',
-    fontWeight: '500',
   },
   optionsOverlay: {
     position: 'absolute',

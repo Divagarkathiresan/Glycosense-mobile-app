@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from models.diabetes_model import RiskInput
 from risk_calculator.diabetes_risk_calculator import calculate_risk_score
 from auth.auth_utils import get_current_user
@@ -8,6 +8,77 @@ from models.diabetes_db_model import DiabetesRiskRecord
 from models.user_metrics import UserMetrics
 
 router = APIRouter()
+
+@router.get("/diabetes-risk/history")
+def get_risk_history(
+    limit: int = Query(30, ge=1, le=200),
+    current_user: User = Depends(get_current_user),
+):
+    db = SessionLocal()
+    try:
+        records = (
+            db.query(DiabetesRiskRecord)
+            .filter(DiabetesRiskRecord.user_id == current_user.id)
+            .order_by(DiabetesRiskRecord.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        records = list(reversed(records))
+        result = []
+        for r in records:
+            bmi_value = r.bmi
+            if bmi_value is None and r.weight_kg and r.height_cm:
+                try:
+                    height_m = r.height_cm / 100.0
+                    bmi_value = round(r.weight_kg / (height_m * height_m), 1)
+                except Exception:
+                    bmi_value = None
+
+            risk_score_value = r.risk_score
+            if risk_score_value is None:
+                try:
+                    computed = calculate_risk_score(
+                        glucose_value=r.glucose_value,
+                        measurement_context=r.measurement_context,
+                        trend=r.trend,
+                        symptoms=r.symptoms,
+                        medication_type=r.medication_type,
+                        meal_type=r.meal_type,
+                        diabetes_status=r.diabetes_status,
+                        age=r.age,
+                        weight_kg=r.weight_kg,
+                        height_cm=r.height_cm,
+                        family_history=r.family_history,
+                        physical_activity=r.physical_activity
+                    )
+                    risk_score_value = computed.get("risk_score")
+                    if bmi_value is None:
+                        bmi_value = computed.get("derived_metrics", {}).get("bmi")
+                except Exception:
+                    risk_score_value = None
+
+            result.append(
+                {
+                    "record_id": r.record_id,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                    "glucose_value": r.glucose_value,
+                    "weight_kg": r.weight_kg,
+                    "height_cm": r.height_cm,
+                    "bmi": bmi_value,
+                    "risk_score": risk_score_value,
+                    "risk_level": r.risk_level,
+                }
+            )
+        return result
+    finally:
+        db.close()
+
+@router.get("/diabetes-risk/records")
+def get_risk_records(
+    limit: int = Query(30, ge=1, le=200),
+    current_user: User = Depends(get_current_user),
+):
+    return get_risk_history(limit, current_user)
 
 @router.get("/diabetes-risk/latest")
 def get_latest_risk(current_user: User = Depends(get_current_user)):

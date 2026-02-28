@@ -1,5 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { Field } from '@/components/form/field';
 import { OptionGroup } from '@/components/form/option-group';
@@ -161,18 +169,24 @@ export default function RiskScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Diabetes Risk Check</Text>
-      {!canSubmit && (
-        <View style={styles.banner}>
-          <Text style={styles.bannerText}>Sign in to run risk checks.</Text>
-          <Link href="/(tabs)/profile" asChild>
-            <Pressable style={styles.bannerButton}>
-              <Text style={styles.bannerButtonText}>Go to Profile</Text>
-            </Pressable>
-          </Link>
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        <View style={styles.headerRow}>
+          <Text style={styles.eyebrow}>Glycosense</Text>
+          <Text style={styles.title}>Diabetes Risk Check</Text>
+          <Text style={styles.subtitle}>Assess your current risk profile.</Text>
         </View>
-      )}
+
+        {!canSubmit && (
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>Sign in to run risk checks.</Text>
+            <Link href="/(tabs)/profile" asChild>
+              <Pressable style={styles.bannerButton}>
+                <Text style={styles.bannerButtonText}>Go to Profile</Text>
+              </Pressable>
+            </Link>
+          </View>
+        )}
 
       <Section title="Glucose">
         <Field
@@ -352,58 +366,88 @@ export default function RiskScreen() {
         </View>
       ) : null}
 
-      {recommendations ? (
-        <View style={styles.resultCard}>
-          <Text style={styles.resultTitle}>Recommendations</Text>
-          {recommendations.length === 0 ? (
-            <Text style={styles.resultHint}>No recommendations returned.</Text>
-          ) : (
-            recommendations.map((rec, idx) => (
-              <Text key={idx} style={styles.compReason}>
-                • {rec}
-              </Text>
-            ))
-          )}
-        </View>
-      ) : null}
-    </ScrollView>
+        {recommendations ? (
+          <View style={styles.resultCard}>
+            <Text style={styles.resultTitle}>Recommendations</Text>
+            {recommendations.length === 0 ? (
+              <Text style={styles.resultHint}>No recommendations returned.</Text>
+            ) : (
+              recommendations.map((rec, idx) => (
+                <Text key={idx} style={styles.compReason}>
+                  • {rec}
+                </Text>
+              ))
+            )}
+          </View>
+        ) : null}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#E9F7EF',
+  },
   container: {
-    padding: 20,
+    padding: 24,
+    paddingBottom: 40,
     gap: 18,
   },
+  headerRow: {
+    gap: 6,
+    marginBottom: 6,
+  },
+  eyebrow: {
+    fontSize: 12,
+    color: '#3B7C5B',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    fontWeight: '600',
+  },
   title: {
-    fontSize: 22,
+    fontSize: 28,
     fontWeight: '700',
+    color: '#1B4332',
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#4F856A',
   },
   banner: {
-    backgroundColor: '#fee2e2',
-    borderRadius: 12,
-    padding: 12,
+    backgroundColor: '#FCEEEE',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#F5C2C2',
     gap: 8,
   },
   bannerText: {
-    color: '#991b1b',
+    color: '#8B1F1F',
+    fontWeight: '600',
   },
   bannerButton: {
     alignSelf: 'flex-start',
     backgroundColor: '#991b1b',
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: 10,
   },
   bannerButtonText: {
     color: '#fff',
     fontWeight: '600',
   },
   primaryButton: {
-    backgroundColor: '#0f172a',
-    borderRadius: 12,
-    paddingVertical: 12,
+    backgroundColor: '#1B4332',
+    borderRadius: 14,
+    paddingVertical: 14,
     alignItems: 'center',
+    shadowColor: '#1B4332',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 2,
   },
   primaryButtonText: {
     color: '#fff',
@@ -419,49 +463,53 @@ const styles = StyleSheet.create({
   },
   toggleLabel: {
     fontSize: 14,
-    color: '#374151',
+    color: '#3B7C5B',
   },
   toggle: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#CDEFD8',
     paddingHorizontal: 14,
     paddingVertical: 6,
+    backgroundColor: '#F8FFFB',
   },
   toggleActive: {
-    backgroundColor: '#0f172a',
-    borderColor: '#0f172a',
+    backgroundColor: '#1B4332',
+    borderColor: '#1B4332',
   },
   toggleText: {
     fontSize: 12,
-    color: '#111827',
+    color: '#1B4332',
   },
   toggleTextActive: {
     color: '#fff',
   },
   resultCard: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 14,
-    padding: 16,
+    backgroundColor: '#F8FFFB',
+    borderRadius: 20,
+    padding: 18,
     gap: 8,
+    borderWidth: 1,
+    borderColor: '#CDEFD8',
   },
   resultTitle: {
     fontSize: 14,
-    color: '#6b7280',
+    color: '#3B7C5B',
     textTransform: 'uppercase',
   },
   resultValue: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
+    color: '#1B4332',
   },
   resultHint: {
-    color: '#4b5563',
+    color: '#4F856A',
   },
   compBlock: {
     gap: 6,
   },
   compReason: {
-    color: '#374151',
+    color: '#2D6A4F',
   },
   actionRow: {
     flexDirection: 'row',
@@ -470,13 +518,15 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
     flex: 1,
-    backgroundColor: '#e2e8f0',
-    borderRadius: 10,
-    paddingVertical: 10,
+    backgroundColor: '#E7F6EE',
+    borderRadius: 12,
+    paddingVertical: 12,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#CDEFD8',
   },
   secondaryButtonText: {
     fontWeight: '600',
-    color: '#0f172a',
+    color: '#1B4332',
   },
 });
