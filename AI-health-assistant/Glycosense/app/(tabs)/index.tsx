@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Image,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -8,11 +9,13 @@ import {
   Text,
   View,
 } from 'react-native';
+import Svg, { Line, Circle } from 'react-native-svg';
 import { Link } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/context/auth';
+import { useTheme } from '@/context/theme';
 
 type RiskHistoryItem = {
   record_id: number;
@@ -50,11 +53,27 @@ type ChartDatum = {
   bmi?: number;
   weight?: number;
   riskScore?: number;
+  riskLevel?: string | null;
 };
 
-function LineChart({ data }: { data: ChartDatum[] }) {
+function LineChart({ data, styles }: { data: ChartDatum[]; styles: any }) {
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const getGlucoseStatus = useCallback((value?: number) => {
+    if (typeof value !== 'number') {
+      return { label: 'Unknown', color: '#64748B', emoji: '⚪️' };
+    }
+    if (value < 90) {
+      return { label: 'Low', color: '#16A34A', emoji: '🟢' };
+    }
+    if (value <= 140) {
+      return { label: 'Normal', color: '#16A34A', emoji: '🟢' };
+    }
+    if (value <= 180) {
+      return { label: 'Elevated', color: '#F59E0B', emoji: '🟡' };
+    }
+    return { label: 'High', color: '#DC2626', emoji: '🔴' };
+  }, []);
 
   const { points, minValue, maxValue } = useMemo(() => {
     if (data.length === 0 || size.width === 0 || size.height === 0) 
@@ -78,7 +97,11 @@ function LineChart({ data }: { data: ChartDatum[] }) {
   }, [data, size]);
 
   return (
-    <View
+    <Pressable
+      style={styles.chartPlot}
+      onPress={() => setActiveIndex(null)}
+    >
+      <View
       style={styles.chartPlot}
       onLayout={(event) => {
         const { width, height } = event.nativeEvent.layout;
@@ -91,34 +114,41 @@ function LineChart({ data }: { data: ChartDatum[] }) {
         <View style={styles.gridLine} />
       </View>
       
-      {points.length > 1 && (
-        <>
+      {points.length > 1 && size.width > 0 && size.height > 0 && (
+        <Svg
+          width={size.width}
+          height={size.height}
+          style={{ position: 'absolute', top: 0, left: 0 }}
+        >
           {points.slice(0, -1).map((point, index) => {
             const next = points[index + 1];
-            const dx = next.x - point.x;
-            const dy = next.y - point.y;
-            const length = Math.sqrt(dx * dx + dy * dy);
-            const angle = Math.atan2(dy, dx);
             return (
-              <View
+              <Line
                 key={`line-${index}`}
-                style={{
-                  position: 'absolute',
-                  left: point.x,
-                  top: point.y,
-                  width: length,
-                  height: 3,
-                  backgroundColor: '#0EA5A4',
-                  transform: [{ rotate: `${angle}rad` }],
-                }}
+                x1={point.x}
+                y1={point.y}
+                x2={next.x}
+                y2={next.y}
+                stroke="#0EA5A4"
+                strokeWidth="3"
+                strokeLinecap="round"
               />
             );
           })}
+        </Svg>
+      )}
+
+      {points.length > 0 && (
+        <>
           {points.map((point, index) => (
             <Pressable
               key={`dot-${index}`}
               style={[styles.chartDot, { left: point.x - 5, top: point.y - 5 }]}
-              onPress={() => setActiveIndex(activeIndex === index ? null : index)}
+              hitSlop={10}
+              onPress={(event) => {
+                event.stopPropagation?.();
+                setActiveIndex(activeIndex === index ? null : index);
+              }}
             >
               <View style={styles.chartDotInner} />
             </Pressable>
@@ -130,6 +160,7 @@ function LineChart({ data }: { data: ChartDatum[] }) {
         (() => {
           const point = points[activeIndex];
           const datum = data[activeIndex];
+          const glucoseStatus = getGlucoseStatus(datum.glucose);
           const tooltipWidth = 170;
           const left = Math.min(
             Math.max(point.x - tooltipWidth / 2, 8),
@@ -139,10 +170,12 @@ function LineChart({ data }: { data: ChartDatum[] }) {
           return (
             <View style={[styles.tooltip, { left, top }]}>
               <Text style={styles.tooltipTitle}>{datum.date}</Text>
-              <Text style={styles.tooltipText}>Glucose: {datum.glucose ?? '—'} mg/dL</Text>
-              <Text style={styles.tooltipText}>BMI: {datum.bmi ?? '—'}</Text>
-              <Text style={styles.tooltipText}>Weight: {datum.weight ?? '—'} kg</Text>
-              <Text style={styles.tooltipText}>Risk: {datum.riskScore ?? '—'}</Text>
+              <Text style={[styles.tooltipText, { color: glucoseStatus.color }]}>
+                {glucoseStatus.emoji} Glucose: {datum.glucose ?? '—'} mg/dL
+              </Text>
+              <Text style={styles.tooltipText}>📊 Risk score: {datum.riskScore ?? '—'}</Text>
+              <Text style={styles.tooltipText}>🧭 Risk level: {datum.riskLevel ?? '—'}</Text>
+              <Text style={styles.tooltipText}>🧮 BMI: {datum.bmi ?? '—'}</Text>
             </View>
           );
         })()
@@ -175,17 +208,22 @@ function LineChart({ data }: { data: ChartDatum[] }) {
           })}
         </View>
       )}
-    </View>
+      </View>
+    </Pressable>
   );
 }
 
 export default function HomeScreen() {
   const { user, token, logout } = useAuth();
+  const { mode, toggleTheme } = useTheme();
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [riskHistory, setRiskHistory] = useState<RiskHistoryItem[]>([]);
   const [riskHistoryError, setRiskHistoryError] = useState<string | null>(null);
   const [latestRisk, setLatestRisk] = useState<LatestRisk | null>(null);
   const [useRiskHistoryEndpoint, setUseRiskHistoryEndpoint] = useState(true);
+
+  const isDark = mode === 'dark';
+  const styles = useMemo(() => createStyles(isDark), [isDark]);
 
   const loadRiskHistory = useCallback(async () => {
     if (!token) return;
@@ -286,10 +324,22 @@ export default function HomeScreen() {
       bmi: item.bmi ?? undefined,
       weight: item.weight_kg ?? undefined,
       riskScore: item.risk_score ?? undefined,
+      riskLevel: item.risk_level ?? null,
       date: item.created_at
         ? new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
         : ''
     }));
+  }, [riskHistory]);
+
+  const healthStats = useMemo(() => {
+    const latest = riskHistory[riskHistory.length - 1];
+    const avgGlucose = riskHistory.length > 0
+      ? Math.round(riskHistory.reduce((sum, item) => sum + (item.glucose_value ?? 0), 0) / riskHistory.length)
+      : 0;
+    const avgBMI = riskHistory.filter(i => i.bmi).length > 0
+      ? (riskHistory.reduce((sum, item) => sum + (item.bmi ?? 0), 0) / riskHistory.filter(i => i.bmi).length).toFixed(1)
+      : null;
+    return { latest, avgGlucose, avgBMI, totalRecords: riskHistory.length };
   }, [riskHistory]);
 
   return (
@@ -302,9 +352,14 @@ export default function HomeScreen() {
               <View style={styles.menuLine} />
               <View style={styles.menuLine} />
             </Pressable>
-            <View style={styles.userBadge}>
-              <View style={styles.avatarCircle} />
-              <Text style={styles.userName}>{user?.name ?? 'Guest'}</Text>
+            <View style={styles.topBarRight}>
+              <Pressable style={styles.themeToggle} onPress={toggleTheme}>
+                <Text style={styles.themeIcon}>{mode === 'light' ? '🌙' : '☀️'}</Text>
+              </Pressable>
+              <View style={styles.userBadge}>
+                <View style={styles.avatarCircle} />
+                <Text style={styles.userName}>{user?.name ?? 'Guest'}</Text>
+              </View>
             </View>
           </View>
 
@@ -343,7 +398,7 @@ export default function HomeScreen() {
               <Text style={styles.chartAxisLabel}>Glucose Trend</Text>
             </View>
             {glucoseData.length > 1 ? (
-              <LineChart data={glucoseData} />
+              <LineChart data={glucoseData} styles={styles} />
             ) : (
               <View style={styles.chartEmpty}>
                 <Text style={styles.chartEmptyText}>
@@ -352,6 +407,81 @@ export default function HomeScreen() {
               </View>
             )}
           </View>
+
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Health Insights</Text>
+          </View>
+
+          <View style={styles.insightRow}>
+            <View style={styles.insightCard}>
+              <Text style={styles.insightIcon}>📊</Text>
+              <Text style={styles.insightLabel}>Avg Glucose</Text>
+              <Text style={styles.insightValue}>{healthStats.avgGlucose} mg/dL</Text>
+            </View>
+            <View style={styles.insightCard}>
+              <Text style={styles.insightIcon}>⚖️</Text>
+              <Text style={styles.insightLabel}>BMI</Text>
+              <Text style={styles.insightValue}>{healthStats.avgBMI ?? '—'}</Text>
+            </View>
+            <View style={styles.insightCard}>
+              <Text style={styles.insightIcon}>📈</Text>
+              <Text style={styles.insightLabel}>Records</Text>
+              <Text style={styles.insightValue}>{healthStats.totalRecords}</Text>
+            </View>
+          </View>
+
+          <View style={styles.actionCard}>
+            <Text style={styles.actionTitle}>Quick Actions</Text>
+            <Link href="/(tabs)/risk" asChild>
+              <Pressable style={styles.actionButton}>
+                <Text style={styles.actionIcon}>🩺</Text>
+                <View style={styles.actionContent}>
+                  <Text style={styles.actionLabel}>New Risk Assessment</Text>
+                  <Text style={styles.actionHint}>Check your diabetes risk</Text>
+                </View>
+                <Text style={styles.actionArrow}>›</Text>
+              </Pressable>
+            </Link>
+            <Link href="/(tabs)/metrics" asChild>
+              <Pressable style={styles.actionButton}>
+                <Text style={styles.actionIcon}>📋</Text>
+                <View style={styles.actionContent}>
+                  <Text style={styles.actionLabel}>View All Metrics</Text>
+                  <Text style={styles.actionHint}>See your health history</Text>
+                </View>
+                <Text style={styles.actionArrow}>›</Text>
+              </Pressable>
+            </Link>
+          </View>
+
+          {healthStats.latest && (
+            <View style={styles.recentCard}>
+              <Text style={styles.recentTitle}>Latest Reading</Text>
+              <View style={styles.recentRow}>
+                <View style={styles.recentItem}>
+                  <Text style={styles.recentLabel}>Glucose</Text>
+                  <Text style={styles.recentValue}>{healthStats.latest.glucose_value ?? '—'} mg/dL</Text>
+                </View>
+                <View style={styles.recentItem}>
+                  <Text style={styles.recentLabel}>Weight</Text>
+                  <Text style={styles.recentValue}>{healthStats.latest.weight_kg ?? '—'} kg</Text>
+                </View>
+                <View style={styles.recentItem}>
+                  <Text style={styles.recentLabel}>BMI</Text>
+                  <Text style={styles.recentValue}>{healthStats.latest.bmi ?? '—'}</Text>
+                </View>
+              </View>
+              <Text style={styles.recentDate}>
+                {healthStats.latest.created_at
+                  ? new Date(healthStats.latest.created_at).toLocaleDateString('en-US', {
+                      month: 'long',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })
+                  : 'No date'}
+              </Text>
+            </View>
+          )}
         </ScrollView>
 
         {optionsOpen ? (
@@ -416,10 +546,10 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (isDark: boolean) => StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#E9F7EF',
+    backgroundColor: isDark ? '#1F2937' : '#E9F7EF',
   },
   container: {
     flex: 1,
@@ -434,16 +564,39 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
+  topBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  themeToggle: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: isDark ? '#374151' : '#F8FFFB',
+    borderWidth: 1,
+    borderColor: isDark ? '#4B5563' : '#CDEFD8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: isDark ? '#000' : '#1B4332',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  themeIcon: {
+    fontSize: 20,
+  },
   menuButton: {
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: '#F8FFFB',
+    backgroundColor: isDark ? '#374151' : '#F8FFFB',
     borderWidth: 1,
-    borderColor: '#CDEFD8',
+    borderColor: isDark ? '#4B5563' : '#CDEFD8',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#1B4332',
+    shadowColor: isDark ? '#000' : '#1B4332',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 10,
@@ -452,29 +605,29 @@ const styles = StyleSheet.create({
   menuLine: {
     width: 20,
     height: 2,
-    backgroundColor: '#1B4332',
+    backgroundColor: isDark ? '#E5E7EB' : '#1B4332',
     marginVertical: 2,
   },
   userBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8FFFB',
+    backgroundColor: isDark ? '#374151' : '#F8FFFB',
     borderRadius: 20,
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: '#CDEFD8',
+    borderColor: isDark ? '#4B5563' : '#CDEFD8',
   },
   avatarCircle: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#CDEFD8',
+    backgroundColor: isDark ? '#4B5563' : '#CDEFD8',
     marginRight: 8,
   },
   userName: {
     fontSize: 14,
-    color: '#1B4332',
+    color: isDark ? '#E5E7EB' : '#1B4332',
     fontWeight: '600',
   },
   brandRow: {
@@ -487,9 +640,9 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 16,
-    backgroundColor: '#F8FFFB',
+    backgroundColor: isDark ? '#374151' : '#F8FFFB',
     borderWidth: 1,
-    borderColor: '#CDEFD8',
+    borderColor: isDark ? '#4B5563' : '#CDEFD8',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -499,13 +652,13 @@ const styles = StyleSheet.create({
   },
   brand: {
     fontSize: 34,
-    color: '#1B4332',
+    color: isDark ? '#E5E7EB' : '#1B4332',
     fontWeight: '700',
     letterSpacing: 0.4,
   },
   brandSubtitle: {
     fontSize: 13,
-    color: '#3B7C5B',
+    color: isDark ? '#9CA3AF' : '#3B7C5B',
     marginTop: 4,
   },
   statRow: {
@@ -515,32 +668,32 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: '#F8FFFB',
+    backgroundColor: isDark ? '#374151' : '#F8FFFB',
     borderRadius: 20,
     padding: 20,
     minHeight: 120,
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#CDEFD8',
+    borderColor: isDark ? '#4B5563' : '#CDEFD8',
   },
   statLabel: {
     fontSize: 16,
-    color: '#3B7C5B',
+    color: isDark ? '#9CA3AF' : '#3B7C5B',
     marginBottom: 8,
   },
   statValue: {
     fontSize: 22,
-    color: '#1B4332',
+    color: isDark ? '#E5E7EB' : '#1B4332',
     fontWeight: '700',
   },
   statHint: {
     marginTop: 4,
     fontSize: 12,
-    color: '#4F856A',
+    color: isDark ? '#9CA3AF' : '#4F856A',
     textTransform: 'uppercase',
   },
   chartCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: isDark ? '#374151' : '#FFFFFF',
     borderRadius: 20,
     padding: 20,
     minHeight: 280,
@@ -559,11 +712,11 @@ const styles = StyleSheet.create({
   chartAxisLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1B4332',
+    color: isDark ? '#E5E7EB' : '#1B4332',
   },
   chartPlot: {
     height: 180,
-    backgroundColor: '#F8FFFB',
+    backgroundColor: isDark ? '#1F2937' : '#F8FFFB',
     borderRadius: 16,
     position: 'relative',
     marginBottom: 12,
@@ -578,7 +731,7 @@ const styles = StyleSheet.create({
   },
   gridLine: {
     height: 1,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: isDark ? '#4B5563' : '#E0E0E0',
     opacity: 0.5,
   },
   chartLine: {
@@ -592,7 +745,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: isDark ? '#374151' : '#FFFFFF',
     borderWidth: 3,
     borderColor: '#0EA5A4',
     shadowColor: '#0EA5A4',
@@ -632,27 +785,28 @@ const styles = StyleSheet.create({
   tooltip: {
     position: 'absolute',
     width: 170,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: isDark ? '#1F2937' : '#FFFFFF',
     borderRadius: 12,
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderWidth: 1,
-    borderColor: '#CDEFD8',
-    shadowColor: '#1B4332',
+    borderColor: isDark ? '#4B5563' : '#CDEFD8',
+    shadowColor: isDark ? '#000' : '#1B4332',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.12,
     shadowRadius: 10,
     elevation: 3,
+    zIndex: 20,
   },
   tooltipTitle: {
     fontSize: 11,
-    color: '#1B4332',
+    color: isDark ? '#E5E7EB' : '#1B4332',
     fontWeight: '700',
     marginBottom: 4,
   },
   tooltipText: {
     fontSize: 11,
-    color: '#3B7C5B',
+    color: isDark ? '#9CA3AF' : '#3B7C5B',
   },
   chartEmpty: {
     flex: 1,
@@ -661,8 +815,138 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   chartEmptyText: {
-    color: '#4F856A',
+    color: isDark ? '#9CA3AF' : '#4F856A',
     textAlign: 'center',
+  },
+  sectionHeader: {
+    marginTop: 28,
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: isDark ? '#E5E7EB' : '#1B4332',
+  },
+  insightRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 24,
+  },
+  insightCard: {
+    flex: 1,
+    backgroundColor: isDark ? '#374151' : '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  insightIcon: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  insightLabel: {
+    fontSize: 12,
+    color: isDark ? '#9CA3AF' : '#4F856A',
+    marginBottom: 4,
+  },
+  insightValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: isDark ? '#E5E7EB' : '#1B4332',
+  },
+  actionCard: {
+    backgroundColor: isDark ? '#374151' : '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  actionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: isDark ? '#E5E7EB' : '#1B4332',
+    marginBottom: 16,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: isDark ? '#1F2937' : '#F8FFFB',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: isDark ? '#4B5563' : '#CDEFD8',
+  },
+  actionIcon: {
+    fontSize: 28,
+    marginRight: 14,
+  },
+  actionContent: {
+    flex: 1,
+  },
+  actionLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: isDark ? '#E5E7EB' : '#1B4332',
+    marginBottom: 2,
+  },
+  actionHint: {
+    fontSize: 13,
+    color: isDark ? '#9CA3AF' : '#4F856A',
+  },
+  actionArrow: {
+    fontSize: 24,
+    color: isDark ? '#9CA3AF' : '#0EA5A4',
+    fontWeight: '600',
+  },
+  recentCard: {
+    backgroundColor: isDark ? '#374151' : '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  recentTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: isDark ? '#E5E7EB' : '#1B4332',
+    marginBottom: 16,
+  },
+  recentRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  recentItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  recentLabel: {
+    fontSize: 12,
+    color: isDark ? '#9CA3AF' : '#4F856A',
+    marginBottom: 6,
+  },
+  recentValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: isDark ? '#E5E7EB' : '#1B4332',
+  },
+  recentDate: {
+    fontSize: 13,
+    color: isDark ? '#9CA3AF' : '#3B7C5B',
+    textAlign: 'center',
+    marginTop: 8,
   },
   optionsOverlay: {
     position: 'absolute',
@@ -674,7 +958,7 @@ const styles = StyleSheet.create({
   },
   optionsPanel: {
     width: 280,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: isDark ? '#1F2937' : '#FFFFFF',
     paddingTop: 60,
     paddingBottom: 30,
     paddingHorizontal: 20,
@@ -695,13 +979,13 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#F4F9F9',
+    backgroundColor: isDark ? '#374151' : '#F4F9F9',
     alignItems: 'center',
     justifyContent: 'center',
   },
   closeIcon: {
     fontSize: 20,
-    color: '#0F172A',
+    color: isDark ? '#E5E7EB' : '#0F172A',
     fontWeight: '600',
   },
   drawerHeader: {
@@ -725,7 +1009,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: isDark ? '#374151' : '#E2E8F0',
     marginVertical: 16,
   },
   optionButton: {
@@ -735,7 +1019,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 12,
     marginBottom: 8,
-    backgroundColor: '#F4F9F9',
+    backgroundColor: isDark ? '#374151' : '#F4F9F9',
   },
   optionIcon: {
     fontSize: 22,
@@ -743,7 +1027,7 @@ const styles = StyleSheet.create({
   },
   optionText: {
     fontSize: 16,
-    color: '#0F172A',
+    color: isDark ? '#E5E7EB' : '#0F172A',
     fontWeight: '500',
   },
   logoutButton: {

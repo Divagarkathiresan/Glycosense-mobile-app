@@ -1,8 +1,11 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { AppHeader } from '@/components/app-header';
+import { DrawerMenu } from '@/components/drawer-menu';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/context/auth';
+import { useTheme } from '@/context/theme';
 import { Link } from 'expo-router';
 
 type Metric = {
@@ -26,9 +29,14 @@ type Metric = {
 
 export default function MetricsScreen() {
   const { token, user, loading } = useAuth();
+  const { mode } = useTheme();
+  const [menuOpen, setMenuOpen] = useState(false);
   const [items, setItems] = useState<Metric[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const isDark = mode === 'dark';
+  const styles = useMemo(() => createStyles(isDark), [isDark]);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -50,8 +58,10 @@ export default function MetricsScreen() {
   }, [token, load]);
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>My Metrics</Text>
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView contentContainerStyle={styles.container}>
+        <AppHeader onMenuPress={() => setMenuOpen(true)} />
+        <Text style={styles.title}>My Metrics</Text>
       {loading ? (
         <ActivityIndicator />
       ) : !user ? (
@@ -94,41 +104,55 @@ export default function MetricsScreen() {
           )}
         </>
       )}
-    </ScrollView>
+      </ScrollView>
+      <DrawerMenu visible={menuOpen} onClose={() => setMenuOpen(false)} />
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (isDark: boolean) => StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: isDark ? '#1F2937' : '#E9F7EF',
+  },
   container: {
-    padding: 20,
+    padding: 24,
     gap: 16,
   },
   title: {
-    fontSize: 22,
+    fontSize: 28,
     fontWeight: '700',
+    color: isDark ? '#E5E7EB' : '#1B4332',
   },
   primaryButton: {
-    backgroundColor: '#0f172a',
+    backgroundColor: '#0EA5A4',
     borderRadius: 12,
     paddingVertical: 10,
     alignItems: 'center',
+    shadowColor: '#0EA5A4',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 2,
   },
   primaryButtonText: {
     color: '#fff',
     fontWeight: '600',
   },
   banner: {
-    backgroundColor: '#fee2e2',
+    backgroundColor: '#FEE2E2',
     borderRadius: 12,
     padding: 12,
     gap: 8,
+    borderWidth: 1,
+    borderColor: '#F5C2C2',
   },
   bannerText: {
-    color: '#991b1b',
+    color: '#991B1B',
   },
   bannerButton: {
     alignSelf: 'flex-start',
-    backgroundColor: '#991b1b',
+    backgroundColor: '#991B1B',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
@@ -138,28 +162,34 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   card: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: isDark ? '#374151' : '#FFFFFF',
     borderRadius: 14,
     padding: 14,
     gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
   },
   cardTitle: {
     fontSize: 13,
     textTransform: 'uppercase',
-    color: '#6b7280',
+    color: isDark ? '#9CA3AF' : '#3B7C5B',
   },
   cardValue: {
     fontSize: 16,
     fontWeight: '600',
+    color: isDark ? '#E5E7EB' : '#1B4332',
   },
   cardHint: {
-    color: '#4b5563',
+    color: isDark ? '#9CA3AF' : '#4F856A',
     fontSize: 12,
   },
   errorText: {
-    color: '#b91c1c',
+    color: '#991B1B',
   },
   emptyText: {
-    color: '#6b7280',
+    color: isDark ? '#9CA3AF' : '#4F856A',
   },
 });

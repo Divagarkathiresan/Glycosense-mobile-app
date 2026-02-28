@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Alert,
+  Modal,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -8,12 +9,16 @@ import {
   Text,
   View,
 } from 'react-native';
+import Svg, { Circle, G } from 'react-native-svg';
 
 import { Field } from '@/components/form/field';
 import { OptionGroup } from '@/components/form/option-group';
 import { Section } from '@/components/form/section';
+import { AppHeader } from '@/components/app-header';
+import { DrawerMenu } from '@/components/drawer-menu';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/context/auth';
+import { useTheme } from '@/context/theme';
 import { Link } from 'expo-router';
 
 type RiskResult = {
@@ -37,6 +42,8 @@ type RiskResult = {
 
 export default function RiskScreen() {
   const { token, user } = useAuth();
+  const { mode } = useTheme();
+  const [menuOpen, setMenuOpen] = useState(false);
   const [glucose, setGlucose] = useState('120');
   const [age, setAge] = useState('32');
   const [weight, setWeight] = useState('70');
@@ -57,6 +64,11 @@ export default function RiskScreen() {
   const [summary, setSummary] = useState<string | null>(null);
   const [recommendations, setRecommendations] = useState<string[] | null>(null);
   const [saveMetrics, setSaveMetrics] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [activeSection, setActiveSection] = useState<'risk' | 'explanation' | 'recommendations'>('risk');
+
+  const isDark = mode === 'dark';
+  const styles = useMemo(() => createStyles(isDark), [isDark]);
 
   const canSubmit = useMemo(() => Boolean(token && user), [token, user]);
 
@@ -93,6 +105,23 @@ export default function RiskScreen() {
         body: JSON.stringify(payload),
       });
       setResult(risk);
+
+      // Auto-fetch explanation and recommendations
+      const [explainRes, recRes] = await Promise.all([
+        apiFetch<{ summary: string; explanation: string }>('/explain-diabetes', {
+          method: 'POST',
+          body: JSON.stringify({ risk_level: risk.risk_level, risk_score: risk.risk_score }),
+        }),
+        apiFetch<{ recommendations: string[] }>('/diabetes-recommendations', {
+          method: 'POST',
+          token,
+          body: JSON.stringify({ risk_level: risk.risk_level, risk_score: risk.risk_score }),
+        }),
+      ]);
+      setExplanation(explainRes.explanation);
+      setSummary(explainRes.summary);
+      setRecommendations(recRes.recommendations ?? []);
+      setShowModal(true);
 
       if (saveMetrics) {
         await apiFetch('/user-metrics', {
@@ -139,7 +168,7 @@ export default function RiskScreen() {
       setExplanation(explain.explanation);
       setSummary(explain.summary);
     } catch (err: any) {
-      Alert.alert('Error', err.message ?? 'Failed to get explanation');
+      setExplanation('Unable to fetch explanation at this time.');
     } finally {
       setBusy(false);
     }
@@ -162,15 +191,63 @@ export default function RiskScreen() {
       );
       setRecommendations(rec.recommendations ?? []);
     } catch (err: any) {
-      Alert.alert('Error', err.message ?? 'Failed to get recommendations');
+      setRecommendations(['Unable to fetch recommendations at this time.']);
     } finally {
       setBusy(false);
     }
   };
 
+  const PieChart = ({ score }: { score: number }) => {
+    const size = 160;
+    const strokeWidth = 20;
+    const radius = (size - strokeWidth) / 2;
+    const circumference = 2 * Math.PI * radius;
+    const progress = (score / 100) * circumference;
+    const remaining = circumference - progress;
+
+    const getColor = () => {
+      if (score < 30) return '#16A34A';
+      if (score < 60) return '#F59E0B';
+      return '#DC2626';
+    };
+
+    return (
+      <View style={styles.pieContainer}>
+        <Svg width={size} height={size}>
+          <G rotation="-90" origin={`${size / 2}, ${size / 2}`}>
+            <Circle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              stroke={isDark ? '#374151' : '#E5E7EB'}
+              strokeWidth={strokeWidth}
+              fill="none"
+            />
+            <Circle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              stroke={getColor()}
+              strokeWidth={strokeWidth}
+              fill="none"
+              strokeDasharray={`${progress} ${remaining}`}
+              strokeLinecap="round"
+            />
+          </G>
+        </Svg>
+        <View style={styles.pieCenter}>
+          <Text style={styles.pieScore}>{score}</Text>
+          <Text style={styles.pieLabel}>Risk Score</Text>
+        </View>
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        <AppHeader onMenuPress={() => setMenuOpen(true)} />
+        
         <View style={styles.headerRow}>
           <Text style={styles.eyebrow}>Glycosense</Text>
           <Text style={styles.title}>Diabetes Risk Check</Text>
@@ -315,80 +392,122 @@ export default function RiskScreen() {
         style={[styles.primaryButton, (!canSubmit || busy) && styles.buttonDisabled]}
         onPress={submit}
         disabled={!canSubmit || busy}>
-        <Text style={styles.primaryButtonText}>{busy ? 'Working...' : 'Calculate Risk'}</Text>
+        <Text style={styles.primaryButtonText}>{busy ? 'Calculating...' : 'Calculate Risk'}</Text>
       </Pressable>
 
-      {result && (
-        <View style={styles.resultCard}>
-          <Text style={styles.resultTitle}>Result</Text>
-          <Text style={styles.resultValue}>
-            Risk Score: {result.risk_score} ({result.risk_level})
-          </Text>
-          {result.derived_metrics?.bmi ? (
-            <Text style={styles.resultHint}>
-              BMI: {result.derived_metrics.bmi} ({result.derived_metrics.bmi_category})
-            </Text>
-          ) : null}
-          {result.comparison ? (
-            <View style={styles.compBlock}>
-              <Text style={styles.resultHint}>
-                Change: {result.comparison.direction} ({result.comparison.delta})
-              </Text>
-              {result.comparison.reasons?.slice(0, 3).map((r, idx) => (
-                <Text key={idx} style={styles.compReason}>
-                  • {r}
-                </Text>
-              ))}
-            </View>
-          ) : null}
-          <View style={styles.actionRow}>
-            <Pressable style={styles.secondaryButton} onPress={fetchExplanation} disabled={busy}>
-              <Text style={styles.secondaryButtonText}>Explain</Text>
-            </Pressable>
-            <Pressable style={styles.secondaryButton} onPress={fetchRecommendations} disabled={busy}>
-              <Text style={styles.secondaryButtonText}>Recommendations</Text>
-            </Pressable>
+      <Modal
+        visible={showModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Risk Assessment Results</Text>
+                <Pressable onPress={() => setShowModal(false)} style={styles.modalClose}>
+                  <Text style={styles.modalCloseText}>✕</Text>
+                </Pressable>
+              </View>
+
+              {result && (
+                <>
+                  <View style={styles.tabContainer}>
+                    <Pressable
+                      style={[styles.tab, activeSection === 'risk' && styles.tabActive]}
+                      onPress={() => setActiveSection('risk')}
+                    >
+                      <Text style={[styles.tabText, activeSection === 'risk' && styles.tabTextActive]}>
+                        Risk Score
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.tab, activeSection === 'explanation' && styles.tabActive]}
+                      onPress={() => setActiveSection('explanation')}
+                    >
+                      <Text style={[styles.tabText, activeSection === 'explanation' && styles.tabTextActive]}>
+                        Explanation
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.tab, activeSection === 'recommendations' && styles.tabActive]}
+                      onPress={() => setActiveSection('recommendations')}
+                    >
+                      <Text style={[styles.tabText, activeSection === 'recommendations' && styles.tabTextActive]}>
+                        Recommendations
+                      </Text>
+                    </Pressable>
+                  </View>
+
+                  {activeSection === 'risk' && (
+                    <View style={styles.modalSection}>
+                      <PieChart score={result.risk_score} />
+                      <View style={styles.riskInfo}>
+                        <Text style={styles.riskLevel}>Risk Level: {result.risk_level}</Text>
+                        {result.derived_metrics?.bmi && (
+                          <Text style={styles.riskDetail}>
+                            BMI: {result.derived_metrics.bmi} ({result.derived_metrics.bmi_category})
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                  )}
+
+                  {activeSection === 'explanation' && (
+                    <View style={styles.modalSection}>
+                      {summary && <Text style={styles.summaryText}>{summary}</Text>}
+                      {explanation && <Text style={styles.explanationText}>{explanation}</Text>}
+                      <View style={styles.disclaimer}>
+                        <Text style={styles.disclaimerText}>
+                          ⚠️ Disclaimer: This assessment is for informational purposes only and should not replace professional medical advice. Please consult with a healthcare provider for proper diagnosis and treatment.
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {activeSection === 'recommendations' && (
+                    <View style={styles.modalSection}>
+                      {recommendations && recommendations.length > 0 ? (
+                        recommendations.map((rec, idx) => (
+                          <View key={idx} style={styles.recommendationItem}>
+                            <Text style={styles.bullet}>•</Text>
+                            <Text style={styles.recommendationText}>{rec}</Text>
+                          </View>
+                        ))
+                      ) : (
+                        <Text style={styles.explanationText}>No specific recommendations available.</Text>
+                      )}
+                      <View style={styles.disclaimer}>
+                        <Text style={styles.disclaimerText}>
+                          ⚠️ Disclaimer: These recommendations are general guidelines. Always consult with your healthcare provider before making any changes to your diet, exercise, or medication regimen.
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                  <Pressable
+                    style={styles.modalButton}
+                    onPress={() => setShowModal(false)}
+                  >
+                    <Text style={styles.modalButtonText}>Close</Text>
+                  </Pressable>
+                </>
+              )}
+            </ScrollView>
           </View>
         </View>
-      )}
-
-      {summary ? (
-        <View style={styles.resultCard}>
-          <Text style={styles.resultTitle}>Summary</Text>
-          <Text style={styles.resultHint}>{summary}</Text>
-        </View>
-      ) : null}
-
-      {explanation ? (
-        <View style={styles.resultCard}>
-          <Text style={styles.resultTitle}>Explanation</Text>
-          <Text style={styles.resultHint}>{explanation}</Text>
-        </View>
-      ) : null}
-
-        {recommendations ? (
-          <View style={styles.resultCard}>
-            <Text style={styles.resultTitle}>Recommendations</Text>
-            {recommendations.length === 0 ? (
-              <Text style={styles.resultHint}>No recommendations returned.</Text>
-            ) : (
-              recommendations.map((rec, idx) => (
-                <Text key={idx} style={styles.compReason}>
-                  • {rec}
-                </Text>
-              ))
-            )}
-          </View>
-        ) : null}
+      </Modal>
       </ScrollView>
+      <DrawerMenu visible={menuOpen} onClose={() => setMenuOpen(false)} />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (isDark: boolean) => StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#E9F7EF',
+    backgroundColor: isDark ? '#1F2937' : '#E9F7EF',
   },
   container: {
     padding: 24,
@@ -401,7 +520,7 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     fontSize: 12,
-    color: '#3B7C5B',
+    color: isDark ? '#9CA3AF' : '#3B7C5B',
     textTransform: 'uppercase',
     letterSpacing: 1.2,
     fontWeight: '600',
@@ -409,14 +528,14 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#1B4332',
+    color: isDark ? '#E5E7EB' : '#1B4332',
   },
   subtitle: {
     fontSize: 14,
-    color: '#4F856A',
+    color: isDark ? '#9CA3AF' : '#4F856A',
   },
   banner: {
-    backgroundColor: '#FCEEEE',
+    backgroundColor: '#FEE2E2',
     borderRadius: 16,
     padding: 14,
     borderWidth: 1,
@@ -424,12 +543,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   bannerText: {
-    color: '#8B1F1F',
+    color: '#991B1B',
     fontWeight: '600',
   },
   bannerButton: {
     alignSelf: 'flex-start',
-    backgroundColor: '#991b1b',
+    backgroundColor: '#991B1B',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 10,
@@ -439,11 +558,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   primaryButton: {
-    backgroundColor: '#1B4332',
+    backgroundColor: '#0EA5A4',
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: 'center',
-    shadowColor: '#1B4332',
+    shadowColor: '#0EA5A4',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.12,
     shadowRadius: 10,
@@ -463,53 +582,56 @@ const styles = StyleSheet.create({
   },
   toggleLabel: {
     fontSize: 14,
-    color: '#3B7C5B',
+    color: isDark ? '#9CA3AF' : '#3B7C5B',
   },
   toggle: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#CDEFD8',
+    borderColor: isDark ? '#4B5563' : '#CDEFD8',
     paddingHorizontal: 14,
     paddingVertical: 6,
-    backgroundColor: '#F8FFFB',
+    backgroundColor: isDark ? '#374151' : '#F8FFFB',
   },
   toggleActive: {
-    backgroundColor: '#1B4332',
-    borderColor: '#1B4332',
+    backgroundColor: '#0EA5A4',
+    borderColor: '#0EA5A4',
   },
   toggleText: {
     fontSize: 12,
-    color: '#1B4332',
+    color: isDark ? '#E5E7EB' : '#1B4332',
   },
   toggleTextActive: {
     color: '#fff',
   },
   resultCard: {
-    backgroundColor: '#F8FFFB',
+    backgroundColor: isDark ? '#374151' : '#FFFFFF',
     borderRadius: 20,
     padding: 18,
     gap: 8,
-    borderWidth: 1,
-    borderColor: '#CDEFD8',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
   resultTitle: {
     fontSize: 14,
-    color: '#3B7C5B',
+    color: isDark ? '#9CA3AF' : '#3B7C5B',
     textTransform: 'uppercase',
   },
   resultValue: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1B4332',
+    color: isDark ? '#E5E7EB' : '#1B4332',
   },
   resultHint: {
-    color: '#4F856A',
+    color: isDark ? '#9CA3AF' : '#4F856A',
   },
   compBlock: {
     gap: 6,
   },
   compReason: {
-    color: '#2D6A4F',
+    color: isDark ? '#9CA3AF' : '#2D6A4F',
   },
   actionRow: {
     flexDirection: 'row',
@@ -518,15 +640,186 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
     flex: 1,
-    backgroundColor: '#E7F6EE',
+    backgroundColor: isDark ? '#1F2937' : '#F8FFFB',
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#CDEFD8',
+    borderColor: isDark ? '#4B5563' : '#CDEFD8',
   },
   secondaryButtonText: {
     fontWeight: '600',
-    color: '#1B4332',
+    color: isDark ? '#E5E7EB' : '#1B4332',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: isDark ? '#1F2937' : '#FFFFFF',
+    borderRadius: 24,
+    width: '100%',
+    maxHeight: '90%',
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: isDark ? '#E5E7EB' : '#1B4332',
+  },
+  modalClose: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: isDark ? '#374151' : '#F8FFFB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCloseText: {
+    fontSize: 18,
+    color: isDark ? '#E5E7EB' : '#1B4332',
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: isDark ? '#374151' : '#F8FFFB',
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 24,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  tabActive: {
+    backgroundColor: '#0EA5A4',
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: isDark ? '#9CA3AF' : '#4F856A',
+  },
+  tabTextActive: {
+    color: '#FFFFFF',
+  },
+  modalSection: {
+    marginBottom: 28,
+  },
+  sectionHeader: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: isDark ? '#E5E7EB' : '#1B4332',
+    marginBottom: 16,
+  },
+  pieContainer: {
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  pieCenter: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pieScore: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: isDark ? '#E5E7EB' : '#1B4332',
+  },
+  pieLabel: {
+    fontSize: 12,
+    color: isDark ? '#9CA3AF' : '#4F856A',
+    marginTop: 4,
+  },
+  riskInfo: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  riskLevel: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: isDark ? '#E5E7EB' : '#1B4332',
+  },
+  riskDetail: {
+    fontSize: 14,
+    color: isDark ? '#9CA3AF' : '#4F856A',
+  },
+  summaryText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: isDark ? '#E5E7EB' : '#1B4332',
+    marginBottom: 12,
+    lineHeight: 22,
+  },
+  explanationText: {
+    fontSize: 14,
+    color: isDark ? '#9CA3AF' : '#4F856A',
+    lineHeight: 22,
+    marginBottom: 16,
+  },
+  recommendationItem: {
+    flexDirection: 'row',
+    marginBottom: 12,
+    paddingLeft: 8,
+  },
+  bullet: {
+    fontSize: 16,
+    color: '#0EA5A4',
+    marginRight: 12,
+    fontWeight: '700',
+  },
+  recommendationText: {
+    flex: 1,
+    fontSize: 14,
+    color: isDark ? '#9CA3AF' : '#4F856A',
+    lineHeight: 22,
+  },
+  disclaimer: {
+    backgroundColor: isDark ? '#374151' : '#FEF3C7',
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: isDark ? '#4B5563' : '#FDE68A',
+  },
+  disclaimerText: {
+    fontSize: 12,
+    color: isDark ? '#9CA3AF' : '#92400E',
+    lineHeight: 18,
+  },
+  modalButton: {
+    backgroundColor: '#0EA5A4',
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 8,
+    shadowColor: '#0EA5A4',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  modalButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

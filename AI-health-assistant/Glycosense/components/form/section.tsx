@@ -1,30 +1,33 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors } from '@/constants/theme';
+import { useTheme } from '@/context/theme';
 
 export function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? 'light'];
-  const styles = createStyles(colors, colorScheme === 'dark');
+  const { mode } = useTheme();
+  const isDark = mode === 'dark';
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>{title}</Text>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: isDark ? '#374151' : '#FFFFFF',
+        },
+      ]}>
+      <Text style={[styles.title, { color: isDark ? '#9CA3AF' : '#3B7C5B' }]}>{title}</Text>
       <View style={styles.body}>{children}</View>
     </View>
   );
 }
 
-const createStyles = (colors: typeof Colors.light, isDark: boolean) => StyleSheet.create({
+const styles = StyleSheet.create({
   container: {
-    backgroundColor: isDark ? '#1f2937' : '#f9fafb',
     borderRadius: 16,
     padding: 16,
     gap: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 2,
   },
@@ -33,7 +36,6 @@ const createStyles = (colors: typeof Colors.light, isDark: boolean) => StyleShee
     textTransform: 'uppercase',
     letterSpacing: 0.8,
     fontWeight: '600',
-    color: colors.icon,
   },
   body: {
     gap: 14,

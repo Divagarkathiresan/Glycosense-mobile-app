@@ -847,3 +847,8 @@ WHERE pg_catalog.pg_index.indrelid IN (%(oids_1)s) AND NOT pg_catalog.pg_index.i
 2026-02-28 10:31:21,398 INFO sqlalchemy.engine.Engine [generated in 0.00012s] {'attnum_1': 0, 'ord_1': 1, 'pg_get_indexdef_1': True, 'attnum_2': 0, 'generate_subscripts_1': 1, 'param_1': 'p', 'param_2': 'u', 'param_3': 'x', 'oids_1': 24577}
 2026-02-28 10:31:21,455 INFO sqlalchemy.engine.Engine ROLLBACK
 INFO:     Application startup complete.
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [26818]
+INFO:     Stopping reloader process [15302]

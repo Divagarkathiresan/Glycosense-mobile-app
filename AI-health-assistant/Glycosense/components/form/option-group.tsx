@@ -1,7 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors } from '@/constants/theme';
+import { useTheme } from '@/context/theme';
 
 type Option = { label: string; value: string };
 
@@ -13,13 +12,12 @@ type Props = {
 };
 
 export function OptionGroup({ label, value, options, onChange }: Props) {
-  const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? 'light'];
-  const styles = createStyles(colors, colorScheme === 'dark');
+  const { mode } = useTheme();
+  const isDark = mode === 'dark';
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.label, { color: isDark ? '#9CA3AF' : '#3B7C5B' }]}>{label}</Text>
       <View style={styles.row}>
         {options.map((opt) => {
           const active = opt.value === value;
@@ -27,8 +25,16 @@ export function OptionGroup({ label, value, options, onChange }: Props) {
             <Pressable
               key={opt.value}
               onPress={() => onChange(opt.value)}
-              style={[styles.option, active && styles.optionActive]}>
-              <Text style={[styles.optionText, active && styles.optionTextActive]}>{opt.label}</Text>
+              style={[
+                styles.option,
+                {
+                  borderColor: active ? '#0EA5A4' : isDark ? '#4B5563' : '#CDEFD8',
+                  backgroundColor: active ? '#0EA5A4' : isDark ? '#1F2937' : '#F8FFFB',
+                },
+              ]}>
+              <Text style={[styles.optionText, { color: active ? '#fff' : isDark ? '#E5E7EB' : '#1B4332' }]}>
+                {opt.label}
+              </Text>
             </Pressable>
           );
         })}
@@ -37,14 +43,13 @@ export function OptionGroup({ label, value, options, onChange }: Props) {
   );
 }
 
-const createStyles = (colors: typeof Colors.light, isDark: boolean) => StyleSheet.create({
+const styles = StyleSheet.create({
   container: {
     gap: 8,
   },
   label: {
     fontSize: 14,
     fontWeight: '500',
-    color: colors.text,
   },
   row: {
     flexDirection: 'row',
@@ -56,19 +61,9 @@ const createStyles = (colors: typeof Colors.light, isDark: boolean) => StyleShee
     paddingVertical: 10,
     borderRadius: 999,
     borderWidth: 1.5,
-    borderColor: isDark ? '#374151' : '#e5e7eb',
-    backgroundColor: isDark ? '#1f2937' : '#fff',
-  },
-  optionActive: {
-    backgroundColor: colors.tint,
-    borderColor: colors.tint,
   },
   optionText: {
     fontSize: 13,
     fontWeight: '500',
-    color: colors.text,
-  },
-  optionTextActive: {
-    color: '#fff',
   },
 });

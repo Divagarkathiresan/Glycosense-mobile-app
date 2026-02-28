@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -6,6 +6,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,24 +15,16 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 
+import { AppHeader } from '@/components/app-header';
+import { DrawerMenu } from '@/components/drawer-menu';
 import { useAuth } from '@/context/auth';
-
-const COLORS = {
-  background: '#E9F7EF',
-  primary: '#1B4332',
-  secondary: '#2D6A4F',
-  textPrimary: '#1B4332',
-  textSecondary: '#4F856A',
-  inputBorder: '#CDEFD8',
-  card: '#F8FFFB',
-  error: '#8B1F1F',
-  logoBg: '#CDEFD8',
-  divider: '#CDEFD8',
-};
+import { useTheme } from '@/context/theme';
 
 export default function ProfileScreen() {
   const { user, token, loading, login, register, updateProfile, logout } = useAuth();
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const { mode } = useTheme();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -39,6 +32,9 @@ export default function ProfileScreen() {
   const [password, setPassword] = useState('');
 
   const [updating, setUpdating] = useState(false);
+
+  const isDark = mode === 'dark';
+  const styles = useMemo(() => createStyles(isDark), [isDark]);
 
   const handleLogin = async () => {
     try {
@@ -91,12 +87,14 @@ export default function ProfileScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.safeArea}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        {loading ? (
+    <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+          {user && token && <AppHeader onMenuPress={() => setMenuOpen(true)} />}
+          {loading ? (
           <ActivityIndicator />
         ) : user && token ? (
           <>
@@ -123,7 +121,7 @@ export default function ProfileScreen() {
               </Pressable>
               <TextInput
                 placeholder="Full Name"
-                placeholderTextColor={COLORS.textSecondary}
+                placeholderTextColor={isDark ? '#9CA3AF' : '#4F856A'}
                 style={styles.input}
                 value={name}
                 onChangeText={setName}
@@ -131,7 +129,7 @@ export default function ProfileScreen() {
               />
               <TextInput
                 placeholder="Email"
-                placeholderTextColor={COLORS.textSecondary}
+                placeholderTextColor={isDark ? '#9CA3AF' : '#4F856A'}
                 style={styles.input}
                 value={email}
                 onChangeText={setEmail}
@@ -140,7 +138,7 @@ export default function ProfileScreen() {
               />
               <TextInput
                 placeholder="Phone"
-                placeholderTextColor={COLORS.textSecondary}
+                placeholderTextColor={isDark ? '#9CA3AF' : '#4F856A'}
                 style={styles.input}
                 value={phone}
                 onChangeText={setPhone}
@@ -166,9 +164,9 @@ export default function ProfileScreen() {
                 <View style={styles.logoCircle}>
                   <Text style={styles.logoText}>+</Text>
                 </View>
-                <Text style={styles.title}>{mode === 'login' ? 'Welcome Back' : 'Create Account'}</Text>
+                <Text style={styles.title}>{authMode === 'login' ? 'Welcome Back' : 'Create Account'}</Text>
                 <Text style={styles.subtitle}>
-                  {mode === 'login'
+                  {authMode === 'login'
                     ? 'Login to continue monitoring your health'
                     : 'Start your preventive health journey'}
                 </Text>
@@ -176,26 +174,26 @@ export default function ProfileScreen() {
 
               <View style={styles.switchRow}>
                 <Pressable
-                  onPress={() => setMode('login')}
-                  style={[styles.switchButton, mode === 'login' && styles.switchButtonActive]}>
-                  <Text style={[styles.switchText, mode === 'login' && styles.switchTextActive]}>
+                  onPress={() => setAuthMode('login')}
+                  style={[styles.switchButton, authMode === 'login' && styles.switchButtonActive]}>
+                  <Text style={[styles.switchText, authMode === 'login' && styles.switchTextActive]}>
                     Login
                   </Text>
                 </Pressable>
                 <Pressable
-                  onPress={() => setMode('register')}
-                  style={[styles.switchButton, mode === 'register' && styles.switchButtonActive]}>
-                  <Text style={[styles.switchText, mode === 'register' && styles.switchTextActive]}>
+                  onPress={() => setAuthMode('register')}
+                  style={[styles.switchButton, authMode === 'register' && styles.switchButtonActive]}>
+                  <Text style={[styles.switchText, authMode === 'register' && styles.switchTextActive]}>
                     Register
                   </Text>
                 </Pressable>
               </View>
 
               <View style={styles.formCard}>
-                {mode === 'register' ? (
+                {authMode === 'register' ? (
                   <TextInput
                     placeholder="Full Name"
-                    placeholderTextColor={COLORS.textSecondary}
+                    placeholderTextColor={isDark ? '#9CA3AF' : '#4F856A'}
                     style={styles.input}
                     value={name}
                     onChangeText={setName}
@@ -204,17 +202,17 @@ export default function ProfileScreen() {
                 ) : null}
                 <TextInput
                   placeholder="Email"
-                  placeholderTextColor={COLORS.textSecondary}
+                  placeholderTextColor={isDark ? '#9CA3AF' : '#4F856A'}
                   style={styles.input}
                   value={email}
                   onChangeText={setEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
                 />
-                {mode === 'register' ? (
+                {authMode === 'register' ? (
                   <TextInput
                     placeholder="Phone"
-                    placeholderTextColor={COLORS.textSecondary}
+                    placeholderTextColor={isDark ? '#9CA3AF' : '#4F856A'}
                     style={styles.input}
                     value={phone}
                     onChangeText={setPhone}
@@ -223,7 +221,7 @@ export default function ProfileScreen() {
                 ) : null}
                 <TextInput
                   placeholder="Password"
-                  placeholderTextColor={COLORS.textSecondary}
+                  placeholderTextColor={isDark ? '#9CA3AF' : '#4F856A'}
                   style={styles.input}
                   value={password}
                   onChangeText={setPassword}
@@ -231,10 +229,10 @@ export default function ProfileScreen() {
                 />
                 <Pressable
                   style={styles.primaryButton}
-                  onPress={mode === 'login' ? handleLogin : handleRegister}
+                  onPress={authMode === 'login' ? handleLogin : handleRegister}
                   disabled={updating}>
                   <Text style={styles.primaryButtonText}>
-                    {updating ? 'Please wait...' : mode === 'login' ? 'Login' : 'Create Account'}
+                    {updating ? 'Please wait...' : authMode === 'login' ? 'Login' : 'Create Account'}
                   </Text>
                 </Pressable>
               </View>
@@ -242,14 +240,16 @@ export default function ProfileScreen() {
           </ImageBackground>
         )}
       </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+      <DrawerMenu visible={menuOpen} onClose={() => setMenuOpen(false)} />
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (isDark: boolean) => StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: isDark ? '#1F2937' : '#E9F7EF',
   },
   container: {
     paddingHorizontal: 28,
@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
     resizeMode: 'cover',
   },
   authOverlay: {
-    backgroundColor: 'rgba(233, 247, 239, 0.9)',
+    backgroundColor: isDark ? 'rgba(31, 41, 55, 0.95)' : 'rgba(233, 247, 239, 0.9)',
     paddingVertical: 24,
     paddingHorizontal: 20,
   },
@@ -278,9 +278,9 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: COLORS.card,
+    backgroundColor: isDark ? '#374151' : '#F8FFFB',
     borderWidth: 1,
-    borderColor: COLORS.inputBorder,
+    borderColor: isDark ? '#4B5563' : '#CDEFD8',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
@@ -288,50 +288,50 @@ const styles = StyleSheet.create({
   logoText: {
     fontSize: 30,
     fontWeight: '700',
-    color: COLORS.primary,
+    color: isDark ? '#E5E7EB' : '#1B4332',
   },
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: COLORS.textPrimary,
+    color: isDark ? '#E5E7EB' : '#1B4332',
   },
   subtitle: {
     fontSize: 15,
-    color: COLORS.textSecondary,
+    color: isDark ? '#9CA3AF' : '#4F856A',
     marginTop: 6,
     textAlign: 'center',
   },
   infoCard: {
     width: '100%',
-    backgroundColor: COLORS.card,
+    backgroundColor: isDark ? '#374151' : '#F8FFFB',
     padding: 18,
     borderRadius: 18,
     marginBottom: 18,
     borderWidth: 1,
-    borderColor: COLORS.inputBorder,
+    borderColor: isDark ? '#4B5563' : '#CDEFD8',
   },
   cardLabel: {
     fontSize: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
-    color: COLORS.textSecondary,
+    color: isDark ? '#9CA3AF' : '#4F856A',
     fontWeight: '600',
   },
   cardValue: {
     fontSize: 18,
     fontWeight: '600',
-    color: COLORS.textPrimary,
+    color: isDark ? '#E5E7EB' : '#1B4332',
     marginTop: 8,
   },
   cardHint: {
-    color: COLORS.textSecondary,
+    color: isDark ? '#9CA3AF' : '#4F856A',
     marginTop: 4,
   },
   adminBadge: {
     alignSelf: 'flex-start',
     marginTop: 10,
-    backgroundColor: COLORS.primary,
-    color: '#fff',
+    backgroundColor: isDark ? '#E5E7EB' : '#1B4332',
+    color: isDark ? '#1B4332' : '#fff',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
@@ -339,36 +339,36 @@ const styles = StyleSheet.create({
   },
   formCard: {
     width: '100%',
-    backgroundColor: COLORS.card,
+    backgroundColor: isDark ? '#374151' : '#F8FFFB',
     padding: 18,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: COLORS.inputBorder,
+    borderColor: isDark ? '#4B5563' : '#CDEFD8',
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: COLORS.textPrimary,
+    color: isDark ? '#E5E7EB' : '#1B4332',
     marginBottom: 10,
   },
   input: {
     height: 52,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: COLORS.inputBorder,
+    borderColor: isDark ? '#4B5563' : '#CDEFD8',
     paddingHorizontal: 16,
-    backgroundColor: COLORS.card,
+    backgroundColor: isDark ? '#1F2937' : '#F8FFFB',
     marginVertical: 10,
-    color: COLORS.textPrimary,
+    color: isDark ? '#E5E7EB' : '#1B4332',
   },
   primaryButton: {
     height: 55,
     borderRadius: 30,
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#0EA5A4',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 20,
-    shadowColor: '#1B4332',
+    shadowColor: '#0EA5A4',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.12,
     shadowRadius: 10,
@@ -382,7 +382,7 @@ const styles = StyleSheet.create({
   logoutButton: {
     marginTop: 18,
     width: '100%',
-    backgroundColor: '#FCEEEE',
+    backgroundColor: '#FEE2E2',
     borderWidth: 1,
     borderColor: '#F5C2C2',
     borderRadius: 16,
@@ -390,7 +390,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoutText: {
-    color: '#8B1F1F',
+    color: '#991B1B',
     fontWeight: '600',
   },
   switchRow: {
@@ -403,34 +403,34 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: COLORS.inputBorder,
+    borderColor: isDark ? '#4B5563' : '#CDEFD8',
     paddingVertical: 10,
     alignItems: 'center',
-    backgroundColor: COLORS.card,
+    backgroundColor: isDark ? '#1F2937' : '#F8FFFB',
   },
   switchButtonActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
+    backgroundColor: '#0EA5A4',
+    borderColor: '#0EA5A4',
   },
   switchText: {
     fontWeight: '600',
-    color: COLORS.textPrimary,
+    color: isDark ? '#E5E7EB' : '#1B4332',
   },
   switchTextActive: {
     color: '#FFFFFF',
   },
   secondaryButton: {
     alignSelf: 'flex-start',
-    backgroundColor: '#E7F6EE',
+    backgroundColor: isDark ? '#1F2937' : '#E7F6EE',
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
     marginBottom: 6,
     borderWidth: 1,
-    borderColor: COLORS.inputBorder,
+    borderColor: isDark ? '#4B5563' : '#CDEFD8',
   },
   secondaryButtonText: {
-    color: COLORS.textPrimary,
+    color: isDark ? '#E5E7EB' : '#1B4332',
     fontWeight: '600',
   },
 });
