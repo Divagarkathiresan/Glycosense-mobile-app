@@ -4,9 +4,10 @@ import { useAuth } from '@/context/auth';
 
 type HeaderProps = {
   onMenuPress: () => void;
+  hideUsername?: boolean;
 };
 
-export function AppHeader({ onMenuPress }: HeaderProps) {
+export function AppHeader({ onMenuPress, hideUsername }: HeaderProps) {
   const { user } = useAuth();
 
   return (
@@ -16,10 +17,12 @@ export function AppHeader({ onMenuPress }: HeaderProps) {
         <View style={styles.menuLine} />
         <View style={styles.menuLine} />
       </Pressable>
-      <View style={styles.userBadge}>
-        <View style={styles.avatarCircle} />
-        <Text style={styles.userName}>{user?.name ?? 'Guest'}</Text>
-      </View>
+      {!hideUsername && (
+        <View style={styles.userBadge}>
+          <View style={styles.avatarCircle} />
+          <Text style={styles.userName}>{user?.name ?? 'Guest'}</Text>
+        </View>
+      )}
     </View>
   );
 }

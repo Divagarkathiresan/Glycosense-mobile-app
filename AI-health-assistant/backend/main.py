@@ -9,12 +9,13 @@ from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text, inspect
 from database import engine, Base, SessionLocal
-from api import auth_router, risk_router
+from api import auth_router, reminder_router, risk_router
 from api.translation_routes import router as translation_router
 from auth.auth_utils import get_current_user
 from models.user import User
 from ExplanableAI.diabetes_explanation_ai import generate_explanation
 from datetime import timezone
+from services.reminder_service import reminder_scheduler
 
 # ---------- APP ----------
 app = FastAPI(
@@ -69,11 +70,18 @@ def init_db():
 @app.on_event("startup")
 def on_startup():
     init_db()
+    reminder_scheduler.start()
+
+
+@app.on_event("shutdown")
+def on_shutdown():
+    reminder_scheduler.stop()
 
 # ---------- INCLUDE ROUTERS ----------
 app.include_router(auth_router, tags=["Authentication"])
 app.include_router(risk_router, tags=["Risk Calculation"])
 app.include_router(translation_router, tags=["Translation"])
+app.include_router(reminder_router, tags=["Reminders"])
 
 # ---------- ROOT & HEALTH CHECK ----------
 @app.get("/")

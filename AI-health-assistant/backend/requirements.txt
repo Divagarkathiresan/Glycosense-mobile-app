@@ -19,3 +19,4 @@ python-dotenv
 python-jose[cryptography]
 bcrypt
 deep-translator
+certifi

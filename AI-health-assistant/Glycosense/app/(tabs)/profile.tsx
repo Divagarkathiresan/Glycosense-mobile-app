@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   ImageBackground,
   KeyboardAvoidingView,
   Platform,
@@ -13,18 +14,29 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 
 import { AppHeader } from '@/components/app-header';
 import { DrawerMenu } from '@/components/drawer-menu';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
+import { apiFetch } from '@/lib/api';
+
+type Metric = {
+  metric_id: number;
+  created_at?: string;
+  timestamp?: number;
+  weight_kg?: number;
+  height_cm?: number;
+};
 
 export default function ProfileScreen() {
   const { user, token, loading, login, register, updateProfile, logout } = useAuth();
   const { mode } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [editMode, setEditMode] = useState(false);
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -32,6 +44,9 @@ export default function ProfileScreen() {
   const [password, setPassword] = useState('');
 
   const [updating, setUpdating] = useState(false);
+  const [metrics, setMetrics] = useState<Metric[]>([]);
+  const [loadingMetrics, setLoadingMetrics] = useState(false);
+  const [profileImage, setProfileImage] = useState<string | null>(null);
 
   const isDark = mode === 'dark';
   const styles = useMemo(() => createStyles(isDark), [isDark]);
@@ -65,6 +80,7 @@ export default function ProfileScreen() {
       setUpdating(true);
       await updateProfile({ name, email, phone_number: phone });
       Alert.alert('Profile updated');
+      setEditMode(false);
     } catch (err: any) {
       Alert.alert('Update failed', err.message ?? 'Please try again.');
     } finally {
@@ -86,6 +102,44 @@ export default function ProfileScreen() {
     setPhone(user.phone_number ?? '');
   };
 
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please grant photo library access to change profile picture.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!result.canceled) {
+      setProfileImage(result.assets[0].uri);
+    }
+  };
+
+  const loadMetrics = useCallback(async () => {
+    if (!token) return;
+    setLoadingMetrics(true);
+    try {
+      const data = await apiFetch<Metric[]>('/user-metrics', { token });
+      const sorted = [...data].sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
+      setMetrics(sorted);
+    } catch (err) {
+      console.error('Failed to load metrics:', err);
+    } finally {
+      setLoadingMetrics(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (token && user) {
+      loadMetrics();
+      prefill();
+    }
+  }, [token, user, loadMetrics]);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
@@ -93,65 +147,134 @@ export default function ProfileScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-          {user && token && <AppHeader onMenuPress={() => setMenuOpen(true)} />}
+          {user && token && <AppHeader onMenuPress={() => setMenuOpen(true)} hideUsername />}
           {loading ? (
           <ActivityIndicator />
         ) : user && token ? (
           <>
             <View style={styles.header}>
-              <View style={styles.logoCircle}>
-                <Text style={styles.logoText}>+</Text>
+              <Pressable onPress={pickImage} style={styles.avatarContainer}>
+                {profileImage ? (
+                  <Image source={{ uri: profileImage }} style={styles.avatarImage} />
+                ) : (
+                  <View style={styles.avatarCircle}>
+                    <Text style={styles.avatarText}>{user.name?.charAt(0).toUpperCase() || '👤'}</Text>
+                  </View>
+                )}
+                <View style={styles.cameraIcon}>
+                  <Text style={styles.cameraText}>📷</Text>
+                </View>
+              </Pressable>
+              <Text style={styles.userName}>{user.name}</Text>
+              <Text style={styles.userEmail}>{user.email}</Text>
+            </View>
+
+            <View style={styles.statsRow}>
+              <View style={styles.statCard}>
+                <Text style={styles.statValue}>{metrics.length}</Text>
+                <Text style={styles.statLabel}>Total Assessments</Text>
               </View>
-              <Text style={styles.title}>Profile</Text>
-              <Text style={styles.subtitle}>Manage your health account details</Text>
+              <View style={styles.statCard}>
+                <Text style={styles.statValue}>
+                  {metrics[0]?.created_at
+                    ? new Date(metrics[0].created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                    : '—'}
+                </Text>
+                <Text style={styles.statLabel}>Last Assessment</Text>
+              </View>
             </View>
 
-            <View style={styles.infoCard}>
-              <Text style={styles.cardLabel}>Signed In</Text>
-              <Text style={styles.cardValue}>{user.name}</Text>
-              <Text style={styles.cardHint}>{user.email}</Text>
-              <Text style={styles.cardHint}>Phone: {user.phone_number}</Text>
-              {user.is_admin ? <Text style={styles.adminBadge}>Admin</Text> : null}
-            </View>
+            {editMode ? (
+              <View style={styles.editCard}>
+                <View style={styles.editHeader}>
+                  <Text style={styles.sectionTitle}>✏️ Edit Profile</Text>
+                  <Pressable onPress={() => setEditMode(false)}>
+                    <Text style={styles.cancelText}>Cancel</Text>
+                  </Pressable>
+                </View>
+                <TextInput
+                  placeholder="Full Name"
+                  placeholderTextColor={isDark ? '#9CA3AF' : '#4F856A'}
+                  style={styles.input}
+                  value={name}
+                  onChangeText={setName}
+                  autoCapitalize="words"
+                />
+                <TextInput
+                  placeholder="Email"
+                  placeholderTextColor={isDark ? '#9CA3AF' : '#4F856A'}
+                  style={styles.input}
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+                <TextInput
+                  placeholder="Phone"
+                  placeholderTextColor={isDark ? '#9CA3AF' : '#4F856A'}
+                  style={styles.input}
+                  value={phone}
+                  onChangeText={setPhone}
+                  keyboardType="phone-pad"
+                />
+                <Pressable style={styles.primaryButton} onPress={handleUpdate} disabled={updating}>
+                  <Text style={styles.primaryButtonText}>{updating ? 'Saving...' : 'Save Changes'}</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <>
+                <View style={styles.infoSection}>
+                  <View style={styles.infoHeader}>
+                    <Text style={styles.sectionTitle}>📋 Personal Information</Text>
+                    <Pressable onPress={() => setEditMode(true)} style={styles.editButton}>
+                      <Text style={styles.editButtonText}>Edit</Text>
+                    </Pressable>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Name</Text>
+                    <Text style={styles.infoValue}>{user.name || '—'}</Text>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Email</Text>
+                    <Text style={styles.infoValue}>{user.email || '—'}</Text>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Phone</Text>
+                    <Text style={styles.infoValue}>{user.phone_number || '—'}</Text>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Member Since</Text>
+                    <Text style={styles.infoValue}>
+                      {user.created_at
+                        ? new Date(user.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+                        : '—'}
+                    </Text>
+                  </View>
+                </View>
 
-            <View style={styles.formCard}>
-              <Text style={styles.sectionTitle}>Edit Profile</Text>
-              <Pressable style={styles.secondaryButton} onPress={prefill}>
-                <Text style={styles.secondaryButtonText}>Load Current Info</Text>
-              </Pressable>
-              <TextInput
-                placeholder="Full Name"
-                placeholderTextColor={isDark ? '#9CA3AF' : '#4F856A'}
-                style={styles.input}
-                value={name}
-                onChangeText={setName}
-                autoCapitalize="words"
-              />
-              <TextInput
-                placeholder="Email"
-                placeholderTextColor={isDark ? '#9CA3AF' : '#4F856A'}
-                style={styles.input}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-              <TextInput
-                placeholder="Phone"
-                placeholderTextColor={isDark ? '#9CA3AF' : '#4F856A'}
-                style={styles.input}
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-              />
-              <Pressable style={styles.primaryButton} onPress={handleUpdate} disabled={updating}>
-                <Text style={styles.primaryButtonText}>{updating ? 'Saving...' : 'Save Changes'}</Text>
-              </Pressable>
-            </View>
-
-            <Pressable style={styles.logoutButton} onPress={handleLogout}>
-              <Text style={styles.logoutText}>Log Out</Text>
-            </Pressable>
+                {metrics[0] && (
+                  <View style={styles.infoSection}>
+                    <Text style={styles.sectionTitle}>📊 Health Metrics</Text>
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Recent Weight</Text>
+                      <Text style={styles.infoValue}>{metrics[0].weight_kg ? `${metrics[0].weight_kg} kg` : '—'}</Text>
+                    </View>
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Height</Text>
+                      <Text style={styles.infoValue}>{metrics[0].height_cm ? `${metrics[0].height_cm} cm` : '—'}</Text>
+                    </View>
+                    {metrics[0].weight_kg && metrics[0].height_cm && (
+                      <View style={styles.infoRow}>
+                        <Text style={styles.infoLabel}>BMI</Text>
+                        <Text style={styles.infoValue}>
+                          {(metrics[0].weight_kg / Math.pow(metrics[0].height_cm / 100, 2)).toFixed(1)}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </>
+            )}
           </>
         ) : (
           <ImageBackground
@@ -252,10 +375,9 @@ const createStyles = (isDark: boolean) => StyleSheet.create({
     backgroundColor: isDark ? '#1F2937' : '#E9F7EF',
   },
   container: {
-    paddingHorizontal: 28,
-    paddingTop: 32,
+    paddingHorizontal: 24,
+    paddingTop: 16,
     paddingBottom: 40,
-    alignItems: 'center',
   },
   authBackground: {
     width: '100%',
@@ -273,6 +395,164 @@ const createStyles = (isDark: boolean) => StyleSheet.create({
   header: {
     alignItems: 'center',
     marginBottom: 24,
+    marginTop: 8,
+  },
+  avatarContainer: {
+    position: 'relative',
+    marginBottom: 16,
+  },
+  avatarCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#0EA5A4',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#0EA5A4',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  avatarImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    shadowColor: '#0EA5A4',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  cameraIcon: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#0EA5A4',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  cameraText: {
+    fontSize: 16,
+  },
+  avatarText: {
+    fontSize: 42,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  userName: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: isDark ? '#E5E7EB' : '#1B4332',
+    marginBottom: 4,
+  },
+  userEmail: {
+    fontSize: 14,
+    color: isDark ? '#9CA3AF' : '#4F856A',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: isDark ? '#374151' : '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  statValue: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#0EA5A4',
+    marginBottom: 6,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: isDark ? '#9CA3AF' : '#4F856A',
+    textAlign: 'center',
+  },
+  infoSection: {
+    backgroundColor: isDark ? '#374151' : '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  infoHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  editButton: {
+    backgroundColor: '#0EA5A4',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  editButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: isDark ? '#4B5563' : '#F0F0F0',
+  },
+  infoLabel: {
+    fontSize: 14,
+    color: isDark ? '#9CA3AF' : '#4F856A',
+  },
+  infoValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: isDark ? '#E5E7EB' : '#1B4332',
+  },
+  editCard: {
+    backgroundColor: isDark ? '#374151' : '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  editHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  cancelText: {
+    color: '#DC2626',
+    fontWeight: '600',
+    fontSize: 14,
   },
   logoCircle: {
     width: 80,
@@ -300,42 +580,6 @@ const createStyles = (isDark: boolean) => StyleSheet.create({
     color: isDark ? '#9CA3AF' : '#4F856A',
     marginTop: 6,
     textAlign: 'center',
-  },
-  infoCard: {
-    width: '100%',
-    backgroundColor: isDark ? '#374151' : '#F8FFFB',
-    padding: 18,
-    borderRadius: 18,
-    marginBottom: 18,
-    borderWidth: 1,
-    borderColor: isDark ? '#4B5563' : '#CDEFD8',
-  },
-  cardLabel: {
-    fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    color: isDark ? '#9CA3AF' : '#4F856A',
-    fontWeight: '600',
-  },
-  cardValue: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: isDark ? '#E5E7EB' : '#1B4332',
-    marginTop: 8,
-  },
-  cardHint: {
-    color: isDark ? '#9CA3AF' : '#4F856A',
-    marginTop: 4,
-  },
-  adminBadge: {
-    alignSelf: 'flex-start',
-    marginTop: 10,
-    backgroundColor: isDark ? '#E5E7EB' : '#1B4332',
-    color: isDark ? '#1B4332' : '#fff',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    fontSize: 12,
   },
   formCard: {
     width: '100%',
@@ -379,20 +623,7 @@ const createStyles = (isDark: boolean) => StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
-  logoutButton: {
-    marginTop: 18,
-    width: '100%',
-    backgroundColor: '#FEE2E2',
-    borderWidth: 1,
-    borderColor: '#F5C2C2',
-    borderRadius: 16,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  logoutText: {
-    color: '#991B1B',
-    fontWeight: '600',
-  },
+
   switchRow: {
     width: '100%',
     flexDirection: 'row',
