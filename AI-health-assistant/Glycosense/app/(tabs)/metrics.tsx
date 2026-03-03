@@ -7,6 +7,7 @@ import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
 import { Link } from 'expo-router';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 type Metric = {
   metric_id: number;
@@ -49,19 +50,25 @@ export default function MetricsScreen() {
   const styles = useMemo(() => createStyles(isDark), [isDark]);
 
   const load = useCallback(async () => {
-    if (!token) return;
+    if (!token || !user) return;
     setBusy(true);
     setError(null);
     try {
-      const data = await apiFetch<Metric[]>('/user-metrics', { token });
-      const sorted = [...data].sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
+      const data = await apiFetch<Metric[]>(
+        `/user-metrics?disease_type=diabetes`,
+        { token }
+      );
+      const deduped = Array.from(
+        new Map(data.map((item) => [item.metric_id, item])).values()
+      );
+      const sorted = [...deduped].sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
       setItems(sorted);
     } catch (err: any) {
       setError(err.message ?? 'Failed to load metrics');
     } finally {
       setBusy(false);
     }
-  }, [token]);
+  }, [token, user]);
 
   useEffect(() => {
     if (token) load();
@@ -165,7 +172,7 @@ export default function MetricsScreen() {
                 >
                   <View style={styles.cardHeader}>
                     <View style={styles.cardHeaderLeft}>
-                      <Text style={styles.cardIcon}>🩺</Text>
+                      <MaterialCommunityIcons name="stethoscope" size={24} color={isDark ? '#E5E7EB' : '#1B4332'} style={styles.cardIcon} />
                       <View>
                         <Text style={styles.cardTitle}>{item.disease_type}</Text>
                         <Text style={styles.cardDate}>
@@ -202,7 +209,7 @@ export default function MetricsScreen() {
                         <>
                           <View style={styles.riskSection}>
                             <View style={styles.riskHeader}>
-                              <Text style={styles.riskIcon}>⚕️</Text>
+                              <MaterialCommunityIcons name="heart-pulse" size={32} color={isDark ? '#E5E7EB' : '#1B4332'} style={styles.riskIcon} />
                               <View style={styles.riskHeaderText}>
                                 <Text style={styles.riskTitle}>Risk Analysis</Text>
                                 <Text style={[styles.riskLevel, { color: risk.risk_score < 30 ? '#16A34A' : risk.risk_score < 60 ? '#F59E0B' : '#DC2626' }]}>
@@ -222,13 +229,19 @@ export default function MetricsScreen() {
                             </View>
                             {risk.explanation && (
                               <View style={styles.explanationBox}>
-                                <Text style={styles.explanationTitle}>💡 Explanation</Text>
+                                <View style={styles.titleRow}>
+                                  <MaterialCommunityIcons name="lightbulb-on-outline" size={16} color={isDark ? '#FCD34D' : '#92400E'} />
+                                  <Text style={styles.explanationTitle}>Explanation</Text>
+                                </View>
                                 <Text style={styles.explanationText}>{risk.explanation}</Text>
                               </View>
                             )}
                             {risk.recommendations && risk.recommendations.length > 0 && (
                               <View style={styles.recommendationsBox}>
-                                <Text style={styles.recommendationsTitle}>✨ Recommendations</Text>
+                                <View style={styles.titleRow}>
+                                  <MaterialCommunityIcons name="star-four-points-outline" size={16} color={isDark ? '#A7F3D0' : '#065F46'} />
+                                  <Text style={styles.recommendationsTitle}>Recommendations</Text>
+                                </View>
                                 {risk.recommendations.map((rec, idx) => (
                                   <View key={idx} style={styles.recommendationItem}>
                                     <Text style={styles.recommendationBullet}>•</Text>
@@ -243,7 +256,10 @@ export default function MetricsScreen() {
                       ) : null}
 
                       <View style={styles.detailSection}>
-                        <Text style={styles.sectionTitle}>📊 Glucose Details</Text>
+                        <View style={styles.titleRow}>
+                          <MaterialCommunityIcons name="chart-line" size={16} color={isDark ? '#E5E7EB' : '#1B4332'} />
+                          <Text style={styles.sectionTitle}>Glucose Details</Text>
+                        </View>
                         <View style={styles.detailRow}>
                           <Text style={styles.detailLabel}>Context:</Text>
                           <Text style={styles.detailValue}>{item.measurement_context ?? '—'}</Text>
@@ -255,7 +271,10 @@ export default function MetricsScreen() {
                       </View>
 
                       <View style={styles.detailSection}>
-                        <Text style={styles.sectionTitle}>🍽️ Lifestyle</Text>
+                        <View style={styles.titleRow}>
+                          <MaterialCommunityIcons name="silverware-fork-knife" size={16} color={isDark ? '#E5E7EB' : '#1B4332'} />
+                          <Text style={styles.sectionTitle}>Lifestyle</Text>
+                        </View>
                         <View style={styles.detailRow}>
                           <Text style={styles.detailLabel}>Meal Type:</Text>
                           <Text style={styles.detailValue}>{item.meal_type ?? '—'}</Text>
@@ -267,7 +286,10 @@ export default function MetricsScreen() {
                       </View>
 
                       <View style={styles.detailSection}>
-                        <Text style={styles.sectionTitle}>💊 Health Status</Text>
+                        <View style={styles.titleRow}>
+                          <MaterialCommunityIcons name="pill" size={16} color={isDark ? '#E5E7EB' : '#1B4332'} />
+                          <Text style={styles.sectionTitle}>Health Status</Text>
+                        </View>
                         <View style={styles.detailRow}>
                           <Text style={styles.detailLabel}>Symptoms:</Text>
                           <Text style={styles.detailValue}>{item.symptoms ?? '—'}</Text>
@@ -283,7 +305,10 @@ export default function MetricsScreen() {
                       </View>
 
                       <View style={styles.detailSection}>
-                        <Text style={styles.sectionTitle}>📏 Body Metrics</Text>
+                        <View style={styles.titleRow}>
+                          <MaterialCommunityIcons name="ruler" size={16} color={isDark ? '#E5E7EB' : '#1B4332'} />
+                          <Text style={styles.sectionTitle}>Body Metrics</Text>
+                        </View>
                         <View style={styles.detailRow}>
                           <Text style={styles.detailLabel}>Age:</Text>
                           <Text style={styles.detailValue}>{item.age ?? '—'} years</Text>
@@ -449,11 +474,16 @@ const createStyles = (isDark: boolean) => StyleSheet.create({
   detailSection: {
     marginBottom: 16,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
   sectionTitle: {
     fontSize: 14,
     fontWeight: '700',
     color: isDark ? '#E5E7EB' : '#1B4332',
-    marginBottom: 10,
   },
   detailRow: {
     flexDirection: 'row',
@@ -555,7 +585,6 @@ const createStyles = (isDark: boolean) => StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: isDark ? '#E5E7EB' : '#1B4332',
-    marginBottom: 8,
   },
   explanationText: {
     fontSize: 13,
@@ -573,7 +602,6 @@ const createStyles = (isDark: boolean) => StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: isDark ? '#E5E7EB' : '#1B4332',
-    marginBottom: 12,
   },
   recommendationItem: {
     flexDirection: 'row',

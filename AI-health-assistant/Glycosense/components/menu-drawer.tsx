@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { Link } from 'expo-router';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { useAuth } from '@/context/auth';
 
@@ -63,28 +64,28 @@ export function MenuDrawer({ title, subtitle, rightContent, containerStyle }: Me
 
             <Link href="/" asChild>
               <Pressable style={styles.optionButton} onPress={() => setOptionsOpen(false)}>
-                <Text style={styles.optionIcon}>🏠</Text>
+                <MaterialCommunityIcons name="home-outline" size={22} color="#0F172A" style={styles.optionIcon} />
                 <Text style={styles.optionText}>Dashboard</Text>
               </Pressable>
             </Link>
 
             <Link href="/(tabs)/risk" asChild>
               <Pressable style={styles.optionButton} onPress={() => setOptionsOpen(false)}>
-                <Text style={styles.optionIcon}>🩺</Text>
+                <MaterialCommunityIcons name="stethoscope" size={22} color="#0F172A" style={styles.optionIcon} />
                 <Text style={styles.optionText}>Risk Assessment</Text>
               </Pressable>
             </Link>
 
             <Link href="/(tabs)/metrics" asChild>
               <Pressable style={styles.optionButton} onPress={() => setOptionsOpen(false)}>
-                <Text style={styles.optionIcon}>📊</Text>
+                <MaterialCommunityIcons name="chart-line" size={22} color="#0F172A" style={styles.optionIcon} />
                 <Text style={styles.optionText}>My Metrics</Text>
               </Pressable>
             </Link>
 
             <Link href="/(tabs)/profile" asChild>
               <Pressable style={styles.optionButton} onPress={() => setOptionsOpen(false)}>
-                <Text style={styles.optionIcon}>👤</Text>
+                <MaterialCommunityIcons name="account-outline" size={22} color="#0F172A" style={styles.optionIcon} />
                 <Text style={styles.optionText}>Profile</Text>
               </Pressable>
             </Link>
@@ -99,13 +100,13 @@ export function MenuDrawer({ title, subtitle, rightContent, containerStyle }: Me
                   setOptionsOpen(false);
                 }}
               >
-                <Text style={styles.logoutIcon}>🚪</Text>
+                <MaterialCommunityIcons name="logout" size={22} color="#991B1B" style={styles.logoutIcon} />
                 <Text style={styles.logoutText}>Logout</Text>
               </Pressable>
             ) : (
               <Link href="/welcome" asChild>
                 <Pressable style={styles.loginButton} onPress={() => setOptionsOpen(false)}>
-                  <Text style={styles.loginIcon}>🔐</Text>
+                  <MaterialCommunityIcons name="lock-outline" size={22} color="#0B7036" style={styles.loginIcon} />
                   <Text style={styles.loginText}>Sign In</Text>
                 </Pressable>
               </Link>

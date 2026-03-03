@@ -22,14 +22,14 @@ export function getApiBaseUrl() {
   const isMobile = Platform.OS === 'ios' || Platform.OS === 'android';
   
   if (isMobile) {
-    const url = 'http://192.168.0.7:8080';
-    console.log('📱 Mobile device detected, using:', url);
+    const url = 'http://192.168.140.217:8080';
+    console.log('[mobile] API base URL:', url);
     return url;
   }
   
   // Use localhost for web
   const url = 'http://localhost:8080';
-  console.log('🌐 Web detected, using:', url);
+  console.log('[web] API base URL:', url);
   return url;
 }
 
@@ -40,7 +40,7 @@ export async function apiFetch<T>(
   const baseUrl = getApiBaseUrl();
   const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
 
-  console.log('🌐 API Request:', url);
+  console.log('[api] request:', url);
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -57,7 +57,7 @@ export async function apiFetch<T>(
       headers,
     });
 
-    console.log('📡 Response status:', res.status);
+    console.log('[api] response status:', res.status);
 
     let payload: any = null;
     try {
@@ -72,14 +72,14 @@ export async function apiFetch<T>(
         payload?.message ||
         payload?.error ||
         `Request failed (${res.status})`;
-      console.error('❌ API Error:', message);
+      console.error('[api] error:', message);
       throw new Error(message);
     }
 
-    console.log('✅ API Success');
+    console.log('[api] success');
     return payload as T;
   } catch (error: any) {
-    console.error('🔥 Network Error:', error.message);
+    console.error('[network] error:', error.message);
     throw error;
   }
 }

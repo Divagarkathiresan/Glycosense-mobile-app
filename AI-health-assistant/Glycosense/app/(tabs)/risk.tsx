@@ -20,6 +20,7 @@ import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
 import { Link } from 'expo-router';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 type RiskResult = {
   risk_score: number;
@@ -115,7 +116,11 @@ export default function RiskScreen() {
         apiFetch<{ recommendations: string[] }>('/diabetes-recommendations', {
           method: 'POST',
           token,
-          body: JSON.stringify({ risk_level: risk.risk_level, risk_score: risk.risk_score }),
+          body: JSON.stringify({ 
+            risk_level: risk.risk_level, 
+            risk_score: risk.risk_score,
+            record_id: risk.record_id 
+          }),
         }),
       ]);
       setExplanation(explainRes.explanation);
@@ -459,9 +464,12 @@ export default function RiskScreen() {
                       {summary && <Text style={styles.summaryText}>{summary}</Text>}
                       {explanation && <Text style={styles.explanationText}>{explanation}</Text>}
                       <View style={styles.disclaimer}>
-                        <Text style={styles.disclaimerText}>
-                          ⚠️ Disclaimer: This assessment is for informational purposes only and should not replace professional medical advice. Please consult with a healthcare provider for proper diagnosis and treatment.
-                        </Text>
+                        <View style={styles.disclaimerRow}>
+                          <MaterialCommunityIcons name="alert-circle-outline" size={16} color={isDark ? '#FCD34D' : '#92400E'} />
+                          <Text style={styles.disclaimerText}>
+                            Disclaimer: This assessment is for informational purposes only and should not replace professional medical advice. Please consult with a healthcare provider for proper diagnosis and treatment.
+                          </Text>
+                        </View>
                       </View>
                     </View>
                   )}
@@ -479,9 +487,12 @@ export default function RiskScreen() {
                         <Text style={styles.explanationText}>No specific recommendations available.</Text>
                       )}
                       <View style={styles.disclaimer}>
-                        <Text style={styles.disclaimerText}>
-                          ⚠️ Disclaimer: These recommendations are general guidelines. Always consult with your healthcare provider before making any changes to your diet, exercise, or medication regimen.
-                        </Text>
+                        <View style={styles.disclaimerRow}>
+                          <MaterialCommunityIcons name="alert-circle-outline" size={16} color={isDark ? '#FCD34D' : '#92400E'} />
+                          <Text style={styles.disclaimerText}>
+                            Disclaimer: These recommendations are general guidelines. Always consult with your healthcare provider before making any changes to your diet, exercise, or medication regimen.
+                          </Text>
+                        </View>
                       </View>
                     </View>
                   )}
@@ -800,7 +811,13 @@ const createStyles = (isDark: boolean) => StyleSheet.create({
     borderWidth: 1,
     borderColor: isDark ? '#4B5563' : '#FDE68A',
   },
+  disclaimerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
   disclaimerText: {
+    flex: 1,
     fontSize: 12,
     color: isDark ? '#9CA3AF' : '#92400E',
     lineHeight: 18,

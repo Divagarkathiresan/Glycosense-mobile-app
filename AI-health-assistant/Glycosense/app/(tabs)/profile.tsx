@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { AppHeader } from '@/components/app-header';
 import { DrawerMenu } from '@/components/drawer-menu';
@@ -158,11 +159,15 @@ export default function ProfileScreen() {
                   <Image source={{ uri: profileImage }} style={styles.avatarImage} />
                 ) : (
                   <View style={styles.avatarCircle}>
-                    <Text style={styles.avatarText}>{user.name?.charAt(0).toUpperCase() || '👤'}</Text>
+                    {user.name?.charAt(0) ? (
+                      <Text style={styles.avatarText}>{user.name.charAt(0).toUpperCase()}</Text>
+                    ) : (
+                      <MaterialCommunityIcons name="account-outline" size={34} color="#FFFFFF" />
+                    )}
                   </View>
                 )}
                 <View style={styles.cameraIcon}>
-                  <Text style={styles.cameraText}>📷</Text>
+                  <MaterialCommunityIcons name="camera-outline" size={16} color="#FFFFFF" style={styles.cameraText} />
                 </View>
               </Pressable>
               <Text style={styles.userName}>{user.name}</Text>
@@ -187,7 +192,10 @@ export default function ProfileScreen() {
             {editMode ? (
               <View style={styles.editCard}>
                 <View style={styles.editHeader}>
-                  <Text style={styles.sectionTitle}>✏️ Edit Profile</Text>
+                  <View style={styles.sectionTitleRow}>
+                    <MaterialCommunityIcons name="pencil-outline" size={16} color={isDark ? '#E5E7EB' : '#1B4332'} />
+                    <Text style={styles.sectionTitle}>Edit Profile</Text>
+                  </View>
                   <Pressable onPress={() => setEditMode(false)}>
                     <Text style={styles.cancelText}>Cancel</Text>
                   </Pressable>
@@ -225,7 +233,10 @@ export default function ProfileScreen() {
               <>
                 <View style={styles.infoSection}>
                   <View style={styles.infoHeader}>
-                    <Text style={styles.sectionTitle}>📋 Personal Information</Text>
+                    <View style={styles.sectionTitleRow}>
+                      <MaterialCommunityIcons name="clipboard-text-outline" size={16} color={isDark ? '#E5E7EB' : '#1B4332'} />
+                      <Text style={styles.sectionTitle}>Personal Information</Text>
+                    </View>
                     <Pressable onPress={() => setEditMode(true)} style={styles.editButton}>
                       <Text style={styles.editButtonText}>Edit</Text>
                     </Pressable>
@@ -242,19 +253,22 @@ export default function ProfileScreen() {
                     <Text style={styles.infoLabel}>Phone</Text>
                     <Text style={styles.infoValue}>{user.phone_number || '—'}</Text>
                   </View>
-                  <View style={styles.infoRow}>
+                  {/* <View style={styles.infoRow}>
                     <Text style={styles.infoLabel}>Member Since</Text>
                     <Text style={styles.infoValue}>
                       {user.created_at
                         ? new Date(user.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
                         : '—'}
                     </Text>
-                  </View>
+                  </View> */}
                 </View>
 
                 {metrics[0] && (
                   <View style={styles.infoSection}>
-                    <Text style={styles.sectionTitle}>📊 Health Metrics</Text>
+                    <View style={styles.sectionTitleRow}>
+                      <MaterialCommunityIcons name="chart-line" size={16} color={isDark ? '#E5E7EB' : '#1B4332'} />
+                      <Text style={styles.sectionTitle}>Health Metrics</Text>
+                    </View>
                     <View style={styles.infoRow}>
                       <Text style={styles.infoLabel}>Recent Weight</Text>
                       <Text style={styles.infoValue}>{metrics[0].weight_kg ? `${metrics[0].weight_kg} kg` : '—'}</Text>
@@ -588,6 +602,11 @@ const createStyles = (isDark: boolean) => StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: isDark ? '#4B5563' : '#CDEFD8',
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   sectionTitle: {
     fontSize: 16,

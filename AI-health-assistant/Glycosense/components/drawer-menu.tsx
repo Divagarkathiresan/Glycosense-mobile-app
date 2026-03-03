@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet, Image } from 'react-native';
 import { Link } from 'expo-router';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '@/context/auth';
 
 type DrawerMenuProps = {
@@ -34,28 +35,28 @@ export function DrawerMenu({ visible, onClose }: DrawerMenuProps) {
 
         <Link href="/(tabs)" asChild>
           <Pressable style={styles.option} onPress={onClose}>
-            <Text style={styles.icon}>🏠</Text>
+            <MaterialCommunityIcons name="home-outline" size={22} color="#0F172A" style={styles.icon} />
             <Text style={styles.text}>Dashboard</Text>
           </Pressable>
         </Link>
 
         <Link href="/(tabs)/risk" asChild>
           <Pressable style={styles.option} onPress={onClose}>
-            <Text style={styles.icon}>🩺</Text>
+            <MaterialCommunityIcons name="stethoscope" size={22} color="#0F172A" style={styles.icon} />
             <Text style={styles.text}>Risk Assessment</Text>
           </Pressable>
         </Link>
 
         <Link href="/(tabs)/metrics" asChild>
           <Pressable style={styles.option} onPress={onClose}>
-            <Text style={styles.icon}>📊</Text>
+            <MaterialCommunityIcons name="chart-line" size={22} color="#0F172A" style={styles.icon} />
             <Text style={styles.text}>My Metrics</Text>
           </Pressable>
         </Link>
 
         <Link href="/(tabs)/profile" asChild>
           <Pressable style={styles.option} onPress={onClose}>
-            <Text style={styles.icon}>👤</Text>
+            <MaterialCommunityIcons name="account-outline" size={22} color="#0F172A" style={styles.icon} />
             <Text style={styles.text}>Profile</Text>
           </Pressable>
         </Link>
@@ -63,7 +64,7 @@ export function DrawerMenu({ visible, onClose }: DrawerMenuProps) {
         <View style={styles.divider} />
 
         <Pressable style={styles.logout} onPress={() => { logout(); onClose(); }}>
-          <Text style={styles.icon}>🚪</Text>
+          <MaterialCommunityIcons name="logout" size={22} color="#991B1B" style={styles.icon} />
           <Text style={styles.logoutText}>Logout</Text>
         </Pressable>
       </View>

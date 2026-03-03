@@ -50,7 +50,20 @@ def ensure_user_phone_schema():
             with engine.begin() as conn:
                 conn.execute(text("CREATE UNIQUE INDEX uq_users_phone_number ON users (phone_number)"))
     except Exception:
-        # Keep app boot resilient; request-time errors will still surface clearly.
+        pass
+
+def ensure_recommendations_schema():
+    """
+    Add risk_record_id column to diabetes_recommendations if missing.
+    """
+    try:
+        inspector = inspect(engine)
+        columns = {col["name"] for col in inspector.get_columns("diabetes_recommendations")}
+        if "risk_record_id" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE diabetes_recommendations ADD COLUMN risk_record_id INTEGER NULL"))
+                conn.execute(text("CREATE INDEX idx_recommendations_risk_record ON diabetes_recommendations (risk_record_id)"))
+    except Exception:
         pass
 
 
@@ -62,8 +75,8 @@ def init_db():
     try:
         Base.metadata.create_all(bind=engine)
         ensure_user_phone_schema()
+        ensure_recommendations_schema()
     except Exception:
-        # DB connectivity issues should not crash the app on import/startup.
         pass
 
 
@@ -121,21 +134,44 @@ def explain_risk(risk_data: dict):
 def get_diabetes_recommendations(risk_data: dict, current_user: User = Depends(get_current_user)):
     from recommendations.diabetes_recommendations import generate_diabetes_recommendations
     from models.recommendations import DiabetesRecommendation
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    logger.info(f"Received risk_data: {risk_data}")
     
     recommendations = generate_diabetes_recommendations(risk_data)
     
-    # Store in database
+    # Store in database linked to the risk record
     db = SessionLocal()
     try:
-        db_recommendation = DiabetesRecommendation(
-            user_id=current_user.id,
-            risk_score=risk_data.get("risk_score", 0),
-            risk_level=risk_data.get("risk_level", "Unknown"),
-            recommendations=recommendations
-        )
-        db.add(db_recommendation)
-        db.commit()
-        db.refresh(db_recommendation)
+        record_id = risk_data.get("record_id")
+        logger.info(f"Record ID: {record_id}, User ID: {current_user.id}")
+        
+        if record_id:
+            existing = db.query(DiabetesRecommendation).filter(
+                DiabetesRecommendation.user_id == current_user.id,
+                DiabetesRecommendation.risk_record_id == record_id
+            ).first()
+            
+            if existing:
+                logger.info(f"Recommendation already exists for record_id {record_id}")
+            else:
+                db_recommendation = DiabetesRecommendation(
+                    user_id=current_user.id,
+                    risk_score=risk_data.get("risk_score", 0),
+                    risk_level=risk_data.get("risk_level", "Unknown"),
+                    risk_record_id=record_id,
+                    recommendations=recommendations
+                )
+                db.add(db_recommendation)
+                db.commit()
+                db.refresh(db_recommendation)
+                logger.info(f"Saved recommendation with ID: {db_recommendation.id}")
+        else:
+            logger.warning("No record_id provided, skipping database save")
+    except Exception as e:
+        logger.error(f"Error saving recommendation: {str(e)}")
+        db.rollback()
     finally:
         db.close()
     

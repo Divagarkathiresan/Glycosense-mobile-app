@@ -191,24 +191,31 @@ def _send_whatsapp_via_twilio(to_phone: str, message: str) -> Tuple[bool, Option
     if not from_whatsapp.startswith("whatsapp:"):
         from_whatsapp = f"whatsapp:{from_whatsapp}"
     try:
-        _twilio_post(
+        to_formatted = _format_whatsapp_number(to_phone)
+        print(f"[WhatsApp] Sending to: {to_formatted}, from: {from_whatsapp}")
+        response = _twilio_post(
             account_sid,
             auth_token,
             {
-                "To": _format_whatsapp_number(to_phone),
+                "To": to_formatted,
                 "From": from_whatsapp,
                 "Body": message,
             },
         )
+        print(f"[WhatsApp] Success: {response.get('sid', 'no-sid')}")
         return True, None
     except urllib.error.HTTPError as exc:
         try:
             body = exc.read().decode("utf-8")
         except Exception:
             body = ""
-        return False, f"Twilio WhatsApp HTTP error: {exc.code}. {body}"
+        error_msg = f"Twilio WhatsApp HTTP error: {exc.code}. {body}"
+        print(f"[WhatsApp] Error: {error_msg}")
+        return False, error_msg
     except Exception as exc:
-        return False, f"Twilio WhatsApp error: {str(exc)}"
+        error_msg = f"Twilio WhatsApp error: {str(exc)}"
+        print(f"[WhatsApp] Error: {error_msg}")
+        return False, error_msg
 
 
 def _log_notification(

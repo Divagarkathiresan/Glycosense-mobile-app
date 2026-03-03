@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Animated,
+  Easing,
   Image,
   Platform,
   Pressable,
@@ -12,6 +14,7 @@ import {
 import Svg, { Line, Circle } from 'react-native-svg';
 import { Link } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/context/auth';
@@ -46,6 +49,14 @@ type ChartPoint = {
   y: number;
 };
 
+type ChartSegment = {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  key: string;
+};
+
 type ChartDatum = {
   value: number;
   date: string;
@@ -56,23 +67,36 @@ type ChartDatum = {
   riskLevel?: string | null;
 };
 
-function LineChart({ data, styles }: { data: ChartDatum[]; styles: any }) {
+function LineChart({
+  data,
+  styles,
+  chartType = 'glucose',
+}: {
+  data: ChartDatum[];
+  styles: any;
+  chartType?: 'glucose' | 'risk';
+}) {
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [drawProgress, setDrawProgress] = useState(1);
+  const drawAnimation = React.useRef(new Animated.Value(0)).current;
+  const glucoseLineColor = '#0EA5A4';
+  const riskLineColor = '#F59E0B';
+  const lineColor = chartType === 'risk' ? riskLineColor : glucoseLineColor;
   const getGlucoseStatus = useCallback((value?: number) => {
     if (typeof value !== 'number') {
-      return { label: 'Unknown', color: '#64748B', emoji: '⚪️' };
+      return { label: 'Unknown', color: '#64748B', iconName: 'help-circle-outline' as const };
     }
     if (value < 90) {
-      return { label: 'Low', color: '#16A34A', emoji: '🟢' };
+      return { label: 'Low', color: '#16A34A', iconName: 'arrow-down-circle-outline' as const };
     }
     if (value <= 140) {
-      return { label: 'Normal', color: '#16A34A', emoji: '🟢' };
+      return { label: 'Normal', color: '#16A34A', iconName: 'check-circle-outline' as const };
     }
     if (value <= 180) {
-      return { label: 'Elevated', color: '#F59E0B', emoji: '🟡' };
+      return { label: 'Elevated', color: '#F59E0B', iconName: 'alert-circle-outline' as const };
     }
-    return { label: 'High', color: '#DC2626', emoji: '🔴' };
+    return { label: 'High', color: '#DC2626', iconName: 'close-circle-outline' as const };
   }, []);
 
   const { points, minValue, maxValue } = useMemo(() => {
@@ -95,6 +119,48 @@ function LineChart({ data, styles }: { data: ChartDatum[]; styles: any }) {
 
     return { points: pts, minValue: min, maxValue: max };
   }, [data, size]);
+
+  const visibleSegments = useMemo(() => {
+    const segments: ChartSegment[] = points.slice(0, -1).map((point, index) => ({
+      x1: point.x,
+      y1: point.y,
+      x2: points[index + 1].x,
+      y2: points[index + 1].y,
+      key: `line-${index}`,
+    }));
+    const visibleLength = drawProgress * segments.length;
+    const fullCount = Math.floor(visibleLength);
+    const partial = visibleLength - fullCount;
+    const drawn = segments.slice(0, fullCount);
+    if (partial > 0 && fullCount < segments.length) {
+      const next = segments[fullCount];
+      drawn.push({
+        ...next,
+        x2: next.x1 + (next.x2 - next.x1) * partial,
+        y2: next.y1 + (next.y2 - next.y1) * partial,
+        key: `${next.key}-partial`,
+      });
+    }
+    return drawn;
+  }, [points, drawProgress]);
+
+  useEffect(() => {
+    if (size.width === 0 || size.height === 0 || points.length <= 1) {
+      setDrawProgress(1);
+      return;
+    }
+    drawAnimation.setValue(0);
+    const listener = drawAnimation.addListener(({ value }) => setDrawProgress(value));
+    Animated.timing(drawAnimation, {
+      toValue: 1,
+      duration: 900,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+    return () => {
+      drawAnimation.removeListener(listener);
+    };
+  }, [points.length, chartType, size.width, size.height, drawAnimation]);
 
   return (
     <Pressable
@@ -120,16 +186,15 @@ function LineChart({ data, styles }: { data: ChartDatum[]; styles: any }) {
           height={size.height}
           style={{ position: 'absolute', top: 0, left: 0 }}
         >
-          {points.slice(0, -1).map((point, index) => {
-            const next = points[index + 1];
+          {visibleSegments.map((segment) => {
             return (
               <Line
-                key={`line-${index}`}
-                x1={point.x}
-                y1={point.y}
-                x2={next.x}
-                y2={next.y}
-                stroke="#0EA5A4"
+                key={segment.key}
+                x1={segment.x1}
+                y1={segment.y1}
+                x2={segment.x2}
+                y2={segment.y2}
+                stroke={lineColor}
                 strokeWidth="3"
                 strokeLinecap="round"
               />
@@ -140,19 +205,31 @@ function LineChart({ data, styles }: { data: ChartDatum[]; styles: any }) {
 
       {points.length > 0 && (
         <>
-          {points.map((point, index) => (
-            <Pressable
-              key={`dot-${index}`}
-              style={[styles.chartDot, { left: point.x - 5, top: point.y - 5 }]}
-              hitSlop={10}
-              onPress={(event) => {
-                event.stopPropagation?.();
-                setActiveIndex(activeIndex === index ? null : index);
-              }}
-            >
-              <View style={styles.chartDotInner} />
-            </Pressable>
-          ))}
+          {points.map((point, index) => {
+            const pointProgress = points.length > 1 ? index / (points.length - 1) : 1;
+            if (pointProgress > drawProgress) return null;
+            return (
+              <Pressable
+                key={`dot-${index}`}
+                style={[
+                  styles.chartDot,
+                  {
+                    left: point.x - 5,
+                    top: point.y - 5,
+                    borderColor: lineColor,
+                    shadowColor: lineColor,
+                  },
+                ]}
+                hitSlop={10}
+                onPress={(event) => {
+                  event.stopPropagation?.();
+                  setActiveIndex(activeIndex === index ? null : index);
+                }}
+              >
+                <View style={[styles.chartDotInner, { backgroundColor: lineColor }]} />
+              </Pressable>
+            );
+          })}
         </>
       )}
 
@@ -170,12 +247,47 @@ function LineChart({ data, styles }: { data: ChartDatum[]; styles: any }) {
           return (
             <View style={[styles.tooltip, { left, top }]}>
               <Text style={styles.tooltipTitle}>{datum.date}</Text>
-              <Text style={[styles.tooltipText, { color: glucoseStatus.color }]}>
-                {glucoseStatus.emoji} Glucose: {datum.glucose ?? '—'} mg/dL
-              </Text>
-              <Text style={styles.tooltipText}>📊 Risk score: {datum.riskScore ?? '—'}</Text>
-              <Text style={styles.tooltipText}>🧭 Risk level: {datum.riskLevel ?? '—'}</Text>
-              <Text style={styles.tooltipText}>🧮 BMI: {datum.bmi ?? '—'}</Text>
+              {chartType === 'glucose' ? (
+                <>
+                  <View style={styles.tooltipRow}>
+                    <MaterialCommunityIcons name={glucoseStatus.iconName} size={12} color={glucoseStatus.color} style={styles.tooltipIcon} />
+                    <Text style={[styles.tooltipText, { color: glucoseStatus.color }]}>
+                      Glucose: {datum.glucose ?? '—'} mg/dL
+                    </Text>
+                  </View>
+                  <View style={styles.tooltipRow}>
+                    <MaterialCommunityIcons name="chart-line" size={12} color="#64748B" style={styles.tooltipIcon} />
+                    <Text style={styles.tooltipText}>Risk score: {datum.riskScore ?? '—'}</Text>
+                  </View>
+                  <View style={styles.tooltipRow}>
+                    <MaterialCommunityIcons name="compass-outline" size={12} color="#64748B" style={styles.tooltipIcon} />
+                    <Text style={styles.tooltipText}>Risk level: {datum.riskLevel ?? '—'}</Text>
+                  </View>
+                  <View style={styles.tooltipRow}>
+                    <MaterialCommunityIcons name="calculator-variant-outline" size={12} color="#64748B" style={styles.tooltipIcon} />
+                    <Text style={styles.tooltipText}>BMI: {datum.bmi ?? '—'}</Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View style={styles.tooltipRow}>
+                    <MaterialCommunityIcons name="chart-line" size={12} color="#64748B" style={styles.tooltipIcon} />
+                    <Text style={styles.tooltipText}>Risk score: {datum.riskScore ?? '—'}</Text>
+                  </View>
+                  <View style={styles.tooltipRow}>
+                    <MaterialCommunityIcons name="compass-outline" size={12} color="#64748B" style={styles.tooltipIcon} />
+                    <Text style={styles.tooltipText}>Risk level: {datum.riskLevel ?? '—'}</Text>
+                  </View>
+                  <View style={styles.tooltipRow}>
+                    <MaterialCommunityIcons name="water-outline" size={12} color="#64748B" style={styles.tooltipIcon} />
+                    <Text style={styles.tooltipText}>Glucose: {datum.glucose ?? '—'} mg/dL</Text>
+                  </View>
+                  <View style={styles.tooltipRow}>
+                    <MaterialCommunityIcons name="calculator-variant-outline" size={12} color="#64748B" style={styles.tooltipIcon} />
+                    <Text style={styles.tooltipText}>BMI: {datum.bmi ?? '—'}</Text>
+                  </View>
+                </>
+              )}
             </View>
           );
         })()
@@ -221,6 +333,7 @@ export default function HomeScreen() {
   const [riskHistoryError, setRiskHistoryError] = useState<string | null>(null);
   const [latestRisk, setLatestRisk] = useState<LatestRisk | null>(null);
   const [useRiskHistoryEndpoint, setUseRiskHistoryEndpoint] = useState(true);
+  const menuAnimation = React.useRef(new Animated.Value(0)).current;
 
   const isDark = mode === 'dark';
   const styles = useMemo(() => createStyles(isDark), [isDark]);
@@ -246,7 +359,7 @@ export default function HomeScreen() {
       try {
         const metrics = await apiFetch<UserMetricItem[]>('/user-metrics', { token });
         const sorted = [...metrics].filter((item) => item.created_at).sort((a, b) => {
-          const at = item.created_at ? new Date(item.created_at).getTime() : 0;
+          const at = a.created_at ? new Date(a.created_at).getTime() : 0;
           const bt = b.created_at ? new Date(b.created_at).getTime() : 0;
           return at - bt;
         });
@@ -309,6 +422,15 @@ export default function HomeScreen() {
     if (token) loadLatestRisk();
   }, [token, loadLatestRisk]);
 
+  useEffect(() => {
+    Animated.timing(menuAnimation, {
+      toValue: optionsOpen ? 1 : 0,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [optionsOpen, menuAnimation]);
+
   const latestGlucose = useMemo(() => {
     const last = [...riskHistory].reverse().find((item) => typeof item.glucose_value === 'number');
     return typeof last?.glucose_value === 'number' ? last.glucose_value : null;
@@ -331,6 +453,23 @@ export default function HomeScreen() {
     }));
   }, [riskHistory]);
 
+  const riskScoreData = useMemo(() => {
+    const filtered = riskHistory
+      .filter((item) => typeof item.risk_score === 'number')
+      .slice(-10);
+    return filtered.map((item) => ({
+      value: item.risk_score as number,
+      glucose: item.glucose_value ?? undefined,
+      bmi: item.bmi ?? undefined,
+      weight: item.weight_kg ?? undefined,
+      riskScore: item.risk_score ?? undefined,
+      riskLevel: item.risk_level ?? null,
+      date: item.created_at
+        ? new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        : '',
+    }));
+  }, [riskHistory]);
+
   const healthStats = useMemo(() => {
     const latest = riskHistory[riskHistory.length - 1];
     const avgGlucose = riskHistory.length > 0
@@ -347,14 +486,81 @@ export default function HomeScreen() {
       <View style={styles.container}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.topBar}>
-            <Pressable style={styles.menuButton} onPress={() => setOptionsOpen(true)}>
-              <View style={styles.menuLine} />
-              <View style={styles.menuLine} />
-              <View style={styles.menuLine} />
+            <Pressable style={styles.menuButton} onPress={() => setOptionsOpen((prev) => !prev)}>
+              <View style={styles.menuIcon}>
+                <Animated.View
+                  style={[
+                    styles.menuLine,
+                    styles.menuLineTop,
+                    {
+                      transform: [
+                        {
+                          translateY: menuAnimation.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [-6, 0],
+                          }),
+                        },
+                        {
+                          rotate: menuAnimation.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: ['0deg', '45deg'],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                />
+                <Animated.View
+                  style={[
+                    styles.menuLine,
+                    {
+                      opacity: menuAnimation.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [1, 0],
+                      }),
+                      transform: [
+                        {
+                          scaleX: menuAnimation.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [1, 0.4],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                />
+                <Animated.View
+                  style={[
+                    styles.menuLine,
+                    styles.menuLineBottom,
+                    {
+                      transform: [
+                        {
+                          translateY: menuAnimation.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [6, 0],
+                          }),
+                        },
+                        {
+                          rotate: menuAnimation.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: ['0deg', '-45deg'],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                />
+              </View>
             </Pressable>
             <View style={styles.topBarRight}>
               <Pressable style={styles.themeToggle} onPress={toggleTheme}>
-                <Text style={styles.themeIcon}>{mode === 'light' ? '🌙' : '☀️'}</Text>
+                <MaterialCommunityIcons
+                  name={mode === 'light' ? 'moon-waning-crescent' : 'white-balance-sunny'}
+                  size={20}
+                  color={isDark ? '#E5E7EB' : '#1B4332'}
+                  style={styles.themeIcon}
+                />
               </Pressable>
               <View style={styles.userBadge}>
                 <View style={styles.avatarCircle} />
@@ -397,12 +603,39 @@ export default function HomeScreen() {
             <View style={styles.chartHeader}>
               <Text style={styles.chartAxisLabel}>Glucose Trend</Text>
             </View>
+            <View style={styles.chartLegend}>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendSwatch, { backgroundColor: '#0EA5A4' }]} />
+                <Text style={styles.legendText}>Glucose (mg/dL)</Text>
+              </View>
+            </View>
             {glucoseData.length > 1 ? (
-              <LineChart data={glucoseData} styles={styles} />
+              <LineChart data={glucoseData} styles={styles} chartType="glucose" />
             ) : (
               <View style={styles.chartEmpty}>
                 <Text style={styles.chartEmptyText}>
                   {riskHistoryError ? riskHistoryError : 'Add glucose metrics to see trends.'}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          <View style={[styles.chartCard, styles.riskChartCard]}>
+            <View style={styles.chartHeader}>
+              <Text style={styles.chartAxisLabel}>Risk Score Trend</Text>
+            </View>
+            <View style={styles.chartLegend}>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendSwatch, { backgroundColor: '#F59E0B' }]} />
+                <Text style={styles.legendText}>Risk Score (0-100)</Text>
+              </View>
+            </View>
+            {riskScoreData.length > 1 ? (
+              <LineChart data={riskScoreData} styles={styles} chartType="risk" />
+            ) : (
+              <View style={styles.chartEmpty}>
+                <Text style={styles.chartEmptyText}>
+                  {riskHistoryError ? riskHistoryError : 'Complete risk assessments to see trends.'}
                 </Text>
               </View>
             )}
@@ -414,17 +647,17 @@ export default function HomeScreen() {
 
           <View style={styles.insightRow}>
             <View style={styles.insightCard}>
-              <Text style={styles.insightIcon}>📊</Text>
+              <MaterialCommunityIcons name="chart-line" size={32} color={isDark ? '#E5E7EB' : '#1B4332'} style={styles.insightIcon} />
               <Text style={styles.insightLabel}>Avg Glucose</Text>
               <Text style={styles.insightValue}>{healthStats.avgGlucose} mg/dL</Text>
             </View>
             <View style={styles.insightCard}>
-              <Text style={styles.insightIcon}>⚖️</Text>
+              <MaterialCommunityIcons name="scale-bathroom" size={32} color={isDark ? '#E5E7EB' : '#1B4332'} style={styles.insightIcon} />
               <Text style={styles.insightLabel}>BMI</Text>
               <Text style={styles.insightValue}>{healthStats.avgBMI ?? '—'}</Text>
             </View>
             <View style={styles.insightCard}>
-              <Text style={styles.insightIcon}>📈</Text>
+              <MaterialCommunityIcons name="file-chart-outline" size={32} color={isDark ? '#E5E7EB' : '#1B4332'} style={styles.insightIcon} />
               <Text style={styles.insightLabel}>Records</Text>
               <Text style={styles.insightValue}>{healthStats.totalRecords}</Text>
             </View>
@@ -434,7 +667,7 @@ export default function HomeScreen() {
             <Text style={styles.actionTitle}>Quick Actions</Text>
             <Link href="/(tabs)/risk" asChild>
               <Pressable style={styles.actionButton}>
-                <Text style={styles.actionIcon}>🩺</Text>
+                <MaterialCommunityIcons name="stethoscope" size={28} color={isDark ? '#E5E7EB' : '#1B4332'} style={styles.actionIcon} />
                 <View style={styles.actionContent}>
                   <Text style={styles.actionLabel}>New Risk Assessment</Text>
                   <Text style={styles.actionHint}>Check your diabetes risk</Text>
@@ -444,7 +677,7 @@ export default function HomeScreen() {
             </Link>
             <Link href="/(tabs)/metrics" asChild>
               <Pressable style={styles.actionButton}>
-                <Text style={styles.actionIcon}>📋</Text>
+                <MaterialCommunityIcons name="clipboard-text-outline" size={28} color={isDark ? '#E5E7EB' : '#1B4332'} style={styles.actionIcon} />
                 <View style={styles.actionContent}>
                   <Text style={styles.actionLabel}>View All Metrics</Text>
                   <Text style={styles.actionHint}>See your health history</Text>
@@ -505,28 +738,28 @@ export default function HomeScreen() {
 
               <Link href="/" asChild>
                 <Pressable style={styles.optionButton} onPress={() => setOptionsOpen(false)}>
-                  <Text style={styles.optionIcon}>🏠</Text>
+                  <MaterialCommunityIcons name="home-outline" size={22} color={isDark ? '#E5E7EB' : '#1B4332'} style={styles.optionIcon} />
                   <Text style={styles.optionText}>Dashboard</Text>
                 </Pressable>
               </Link>
 
               <Link href="/(tabs)/risk" asChild>
                 <Pressable style={styles.optionButton} onPress={() => setOptionsOpen(false)}>
-                  <Text style={styles.optionIcon}>🩺</Text>
+                  <MaterialCommunityIcons name="stethoscope" size={22} color={isDark ? '#E5E7EB' : '#1B4332'} style={styles.optionIcon} />
                   <Text style={styles.optionText}>Risk Assessment</Text>
                 </Pressable>
               </Link>
 
               <Link href="/(tabs)/metrics" asChild>
                 <Pressable style={styles.optionButton} onPress={() => setOptionsOpen(false)}>
-                  <Text style={styles.optionIcon}>📊</Text>
+                  <MaterialCommunityIcons name="chart-line" size={22} color={isDark ? '#E5E7EB' : '#1B4332'} style={styles.optionIcon} />
                   <Text style={styles.optionText}>My Metrics</Text>
                 </Pressable>
               </Link>
 
               <Link href="/(tabs)/profile" asChild>
                 <Pressable style={styles.optionButton} onPress={() => setOptionsOpen(false)}>
-                  <Text style={styles.optionIcon}>👤</Text>
+                  <MaterialCommunityIcons name="account-outline" size={22} color={isDark ? '#E5E7EB' : '#1B4332'} style={styles.optionIcon} />
                   <Text style={styles.optionText}>Profile</Text>
                 </Pressable>
               </Link>
@@ -534,7 +767,7 @@ export default function HomeScreen() {
               <View style={styles.divider} />
 
               <Pressable style={styles.logoutButton} onPress={() => { logout(); setOptionsOpen(false); }}>
-                <Text style={styles.logoutIcon}>🚪</Text>
+                <MaterialCommunityIcons name="logout" size={22} color="#FFFFFF" style={styles.logoutIcon} />
                 <Text style={styles.logoutText}>Logout</Text>
               </Pressable>
             </View>
@@ -602,12 +835,23 @@ const createStyles = (isDark: boolean) => StyleSheet.create({
     shadowRadius: 10,
     elevation: 2,
   },
+  menuIcon: {
+    width: 20,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
   menuLine: {
     width: 20,
     height: 2,
     backgroundColor: isDark ? '#E5E7EB' : '#1B4332',
-    marginVertical: 2,
+    borderRadius: 1,
+    position: 'absolute',
+    top: 7,
   },
+  menuLineTop: {},
+  menuLineBottom: {},
   userBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -703,6 +947,9 @@ const createStyles = (isDark: boolean) => StyleSheet.create({
     shadowRadius: 12,
     elevation: 3,
   },
+  riskChartCard: {
+    marginTop: 16,
+  },
   chartHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -713,6 +960,26 @@ const createStyles = (isDark: boolean) => StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: isDark ? '#E5E7EB' : '#1B4332',
+  },
+  chartLegend: {
+    flexDirection: 'row',
+    gap: 14,
+    marginBottom: 10,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendSwatch: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  legendText: {
+    fontSize: 11,
+    color: isDark ? '#9CA3AF' : '#4F856A',
+    fontWeight: '600',
   },
   chartPlot: {
     height: 180,
@@ -807,6 +1074,14 @@ const createStyles = (isDark: boolean) => StyleSheet.create({
   tooltipText: {
     fontSize: 11,
     color: isDark ? '#9CA3AF' : '#3B7C5B',
+  },
+  tooltipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 1,
+  },
+  tooltipIcon: {
+    marginRight: 6,
   },
   chartEmpty: {
     flex: 1,
