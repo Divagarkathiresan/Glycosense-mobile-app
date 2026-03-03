@@ -18,12 +18,26 @@ export default function RootLayout() {
     <NavThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <ThemeProvider>
         <AuthProvider>
-          <Stack>
-            <Stack.Screen name="welcome" options={{ headerShown: false }} />
-            <Stack.Screen name="login" options={{ headerShown: false }} />
-            <Stack.Screen name="register" options={{ headerShown: false }} />
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              animation: 'slide_from_right',
+              animationDuration: 260,
+            }}
+          >
+            <Stack.Screen name="welcome" />
+            <Stack.Screen name="login" />
+            <Stack.Screen name="register" />
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen
+              name="modal"
+              options={{
+                presentation: 'modal',
+                title: 'Modal',
+                headerShown: true,
+                animation: 'slide_from_bottom',
+              }}
+            />
           </Stack>
           <StatusBar style="auto" />
         </AuthProvider>

@@ -31,6 +31,7 @@ export default function TabLayout() {
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
+        animation: 'shift',
         tabBarButton: HapticTab,
         tabBarStyle: { display: 'none' },
       }}>
