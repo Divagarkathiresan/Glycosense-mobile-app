@@ -1,22 +1,23 @@
 from pydantic import BaseModel, Field
+from typing import Literal, Optional
 
 class RiskInput(BaseModel):
     # -------- USER REFERENCE --------
-    user_id: int = Field(..., gt=0)
+    user_id: Optional[int] = Field(default=None, gt=0)
     
     # -------- GLUCOSE INPUT --------
     glucose_value: float = Field(..., gt=0)
-    measurement_context: str      #before_meal, after_meal, fasting
-    trend: str    #rising, falling, stable
-    symptoms: str  #none, mild, severe
+    measurement_context: Literal["before_meal", "after_meal", "fasting", "post-meal"]
+    trend: Literal["rising", "falling", "stable", "worsening", "improving"]
+    symptoms: Literal["none", "mild", "severe"]
 
     # -------- TREATMENT & LIFESTYLE --------
-    medication_type: str    #none, oral, insulin
-    meal_type: str       #healthy, moderate, unhealthy
-    physical_activity: str  #none, light, moderate, intense
+    medication_type: Literal["none", "oral", "insulin"]
+    meal_type: Literal["healthy", "moderate", "unhealthy", "low-carb", "balanced", "high-carb"]
+    physical_activity: Literal["none", "light", "moderate", "intense", "active", "sometimes", "never"]
 
     # -------- BASELINE HEALTH --------
-    diabetes_status: str  #none, prediabetes, type_2, type_1
+    diabetes_status: Literal["none", "prediabetes", "type_2", "type_1", "non-diabetic", "prediabetic", "type2", "type1"]
     age: int = Field(..., gt=0)  
 
     # -------- ANTHROPOMETRIC DATA --------

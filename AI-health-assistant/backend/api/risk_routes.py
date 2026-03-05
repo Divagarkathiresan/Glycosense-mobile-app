@@ -102,20 +102,23 @@ def get_latest_risk(current_user: User = Depends(get_current_user)):
 
 @router.post("/diabetes-risk")
 def calculate_risk(data: RiskInput, current_user: User = Depends(get_current_user)):
-    result = calculate_risk_score(
-        glucose_value=data.glucose_value,
-        measurement_context=data.measurement_context,
-        trend=data.trend,
-        symptoms=data.symptoms,
-        medication_type=data.medication_type,
-        meal_type=data.meal_type,
-        diabetes_status=data.diabetes_status,
-        age=data.age,
-        weight_kg=data.weight_kg,
-        height_cm=data.height_cm,
-        family_history=data.family_history,
-        physical_activity=data.physical_activity
-    )
+    try:
+        result = calculate_risk_score(
+            glucose_value=data.glucose_value,
+            measurement_context=data.measurement_context,
+            trend=data.trend,
+            symptoms=data.symptoms,
+            medication_type=data.medication_type,
+            meal_type=data.meal_type,
+            diabetes_status=data.diabetes_status,
+            age=data.age,
+            weight_kg=data.weight_kg,
+            height_cm=data.height_cm,
+            family_history=data.family_history,
+            physical_activity=data.physical_activity
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     
     db = SessionLocal()
     try:
@@ -151,87 +154,91 @@ def calculate_risk(data: RiskInput, current_user: User = Depends(get_current_use
         ).order_by(DiabetesRiskRecord.created_at.desc()).first()
 
         if prev_record:
-            prev_result = calculate_risk_score(
-                glucose_value=prev_record.glucose_value,
-                measurement_context=prev_record.measurement_context,
-                trend=prev_record.trend,
-                symptoms=prev_record.symptoms,
-                medication_type=prev_record.medication_type,
-                meal_type=prev_record.meal_type,
-                diabetes_status=prev_record.diabetes_status,
-                age=prev_record.age,
-                weight_kg=prev_record.weight_kg,
-                height_cm=prev_record.height_cm,
-                family_history=prev_record.family_history,
-                physical_activity=prev_record.physical_activity
-            )
-
-            prev_score = prev_result.get("risk_score", 0)
-            curr_score = result.get("risk_score", 0)
-            delta = curr_score - prev_score
-            direction = "increased" if delta > 0 else "decreased" if delta < 0 else "no_change"
-
-            curr_pct = result.get("percentage_breakdown", {})
-            prev_pct = prev_result.get("percentage_breakdown", {})
-            pct_diffs = {}
-            for k in ["immediate_glycemic_percentage", "treatment_symptom_percentage", "baseline_vulnerability_percentage"]:
-                pct_diffs[k] = (curr_pct.get(k, 0) - prev_pct.get(k, 0))
-
-            top_component = max(pct_diffs.keys(), key=lambda x: abs(pct_diffs[x])) if pct_diffs else None
-
-            reasons = []
-            comp_map = {
-                "immediate_glycemic_percentage": "blood glucose factors",
-                "treatment_symptom_percentage": "treatment & symptoms",
-                "baseline_vulnerability_percentage": "baseline vulnerability"
-            }
-            if top_component:
-                diff_val = round(pct_diffs[top_component], 1)
-                if diff_val > 0:
-                    reasons.append(f"Primary driver: {comp_map.get(top_component, top_component)} increased by {diff_val} percentage points compared to the previous assessment.")
-                elif diff_val < 0:
-                    reasons.append(f"Primary driver: {comp_map.get(top_component, top_component)} decreased by {abs(diff_val)} percentage points compared to the previous assessment.")
-
             try:
-                prev_gl = prev_record.glucose_value
-                curr_gl = db_record.glucose_value
-                if prev_gl is not None and curr_gl is not None and curr_gl != prev_gl:
-                    if curr_gl > prev_gl:
-                        reasons.append(f"Your blood glucose rose from {prev_gl} to {curr_gl} mg/dL which increases immediate glycemic risk.")
-                    else:
-                        reasons.append(f"Your blood glucose fell from {prev_gl} to {curr_gl} mg/dL which reduces immediate glycemic risk.")
-            except Exception:
-                pass
+                prev_result = calculate_risk_score(
+                    glucose_value=prev_record.glucose_value,
+                    measurement_context=prev_record.measurement_context,
+                    trend=prev_record.trend,
+                    symptoms=prev_record.symptoms,
+                    medication_type=prev_record.medication_type,
+                    meal_type=prev_record.meal_type,
+                    diabetes_status=prev_record.diabetes_status,
+                    age=prev_record.age,
+                    weight_kg=prev_record.weight_kg,
+                    height_cm=prev_record.height_cm,
+                    family_history=prev_record.family_history,
+                    physical_activity=prev_record.physical_activity
+                )
+            except ValueError:
+                prev_result = None
 
-            for attr in ["trend", "symptoms", "medication_type", "meal_type", "physical_activity"]:
+            if prev_result is not None:
+                prev_score = prev_result.get("risk_score", 0)
+                curr_score = result.get("risk_score", 0)
+                delta = curr_score - prev_score
+                direction = "increased" if delta > 0 else "decreased" if delta < 0 else "no_change"
+
+                curr_pct = result.get("percentage_breakdown", {})
+                prev_pct = prev_result.get("percentage_breakdown", {})
+                pct_diffs = {}
+                for k in ["immediate_glycemic_percentage", "treatment_symptom_percentage", "baseline_vulnerability_percentage"]:
+                    pct_diffs[k] = (curr_pct.get(k, 0) - prev_pct.get(k, 0))
+
+                top_component = max(pct_diffs.keys(), key=lambda x: abs(pct_diffs[x])) if pct_diffs else None
+
+                reasons = []
+                comp_map = {
+                    "immediate_glycemic_percentage": "blood glucose factors",
+                    "treatment_symptom_percentage": "treatment & symptoms",
+                    "baseline_vulnerability_percentage": "baseline vulnerability"
+                }
+                if top_component:
+                    diff_val = round(pct_diffs[top_component], 1)
+                    if diff_val > 0:
+                        reasons.append(f"Primary driver: {comp_map.get(top_component, top_component)} increased by {diff_val} percentage points compared to the previous assessment.")
+                    elif diff_val < 0:
+                        reasons.append(f"Primary driver: {comp_map.get(top_component, top_component)} decreased by {abs(diff_val)} percentage points compared to the previous assessment.")
+
                 try:
-                    prev_val = getattr(prev_record, attr)
-                    curr_val = getattr(db_record, attr)
-                    if prev_val != curr_val:
-                        reasons.append(f"{attr.replace('_', ' ').capitalize()} changed from '{prev_val}' to '{curr_val}', affecting risk.")
+                    prev_gl = prev_record.glucose_value
+                    curr_gl = db_record.glucose_value
+                    if prev_gl is not None and curr_gl is not None and curr_gl != prev_gl:
+                        if curr_gl > prev_gl:
+                            reasons.append(f"Your blood glucose rose from {prev_gl} to {curr_gl} mg/dL which increases immediate glycemic risk.")
+                        else:
+                            reasons.append(f"Your blood glucose fell from {prev_gl} to {curr_gl} mg/dL which reduces immediate glycemic risk.")
                 except Exception:
-                    continue
+                    pass
 
-            try:
-                prev_bmi = prev_result.get("derived_metrics", {}).get("bmi")
-                curr_bmi = result.get("derived_metrics", {}).get("bmi")
-                if prev_bmi and curr_bmi and round(prev_bmi,1) != round(curr_bmi,1):
-                    if curr_bmi > prev_bmi:
-                        reasons.append(f"BMI increased from {prev_bmi} to {curr_bmi}, which raises baseline vulnerability.")
-                    else:
-                        reasons.append(f"BMI decreased from {prev_bmi} to {curr_bmi}, which reduces baseline vulnerability.")
-            except Exception:
-                pass
+                for attr in ["trend", "symptoms", "medication_type", "meal_type", "physical_activity"]:
+                    try:
+                        prev_val = getattr(prev_record, attr)
+                        curr_val = getattr(db_record, attr)
+                        if prev_val != curr_val:
+                            reasons.append(f"{attr.replace('_', ' ').capitalize()} changed from '{prev_val}' to '{curr_val}', affecting risk.")
+                    except Exception:
+                        continue
 
-            result["comparison"] = {
-                "previous_record_id": prev_record.record_id,
-                "previous_created_at": prev_record.created_at.isoformat() if prev_record.created_at else None,
-                "previous_risk_score": prev_score,
-                "current_risk_score": curr_score,
-                "delta": delta,
-                "direction": direction,
-                "reasons": reasons
-            }
+                try:
+                    prev_bmi = prev_result.get("derived_metrics", {}).get("bmi")
+                    curr_bmi = result.get("derived_metrics", {}).get("bmi")
+                    if prev_bmi and curr_bmi and round(prev_bmi,1) != round(curr_bmi,1):
+                        if curr_bmi > prev_bmi:
+                            reasons.append(f"BMI increased from {prev_bmi} to {curr_bmi}, which raises baseline vulnerability.")
+                        else:
+                            reasons.append(f"BMI decreased from {prev_bmi} to {curr_bmi}, which reduces baseline vulnerability.")
+                except Exception:
+                    pass
+
+                result["comparison"] = {
+                    "previous_record_id": prev_record.record_id,
+                    "previous_created_at": prev_record.created_at.isoformat() if prev_record.created_at else None,
+                    "previous_risk_score": prev_score,
+                    "current_risk_score": curr_score,
+                    "delta": delta,
+                    "direction": direction,
+                    "reasons": reasons
+                }
     except Exception as e:
         db.rollback()
         raise

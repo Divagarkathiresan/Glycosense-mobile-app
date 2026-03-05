@@ -5,6 +5,13 @@ from typing import Dict, Any
 # RISK SCORE CALCULATOR
 # ============================================================
 
+def _normalize_choice(field: str, value: str, aliases: Dict[str, str]) -> str:
+    """Normalize legacy/client synonyms to canonical scoring labels."""
+    normalized = aliases.get(value, value)
+    if normalized not in set(aliases.values()):
+        raise ValueError(f"Invalid value for '{field}': '{value}'")
+    return normalized
+
 def calculate_risk_score(
     glucose_value: float,
     measurement_context: str,
@@ -19,6 +26,85 @@ def calculate_risk_score(
     family_history: bool,
     physical_activity: str
 ) -> Dict[str, Any]:
+
+    measurement_context = _normalize_choice(
+        "measurement_context",
+        measurement_context,
+        {
+            "fasting": "fasting",
+            "before_meal": "before_meal",
+            "after_meal": "after_meal",
+            "post-meal": "after_meal",
+        },
+    )
+    trend = _normalize_choice(
+        "trend",
+        trend,
+        {
+            "rising": "rising",
+            "stable": "stable",
+            "falling": "falling",
+            "worsening": "rising",
+            "improving": "falling",
+        },
+    )
+    symptoms = _normalize_choice(
+        "symptoms",
+        symptoms,
+        {
+            "none": "none",
+            "mild": "mild",
+            "severe": "severe",
+        },
+    )
+    medication_type = _normalize_choice(
+        "medication_type",
+        medication_type,
+        {
+            "none": "none",
+            "oral": "oral",
+            "insulin": "insulin",
+        },
+    )
+    meal_type = _normalize_choice(
+        "meal_type",
+        meal_type,
+        {
+            "healthy": "healthy",
+            "moderate": "moderate",
+            "unhealthy": "unhealthy",
+            "low-carb": "healthy",
+            "balanced": "moderate",
+            "high-carb": "unhealthy",
+        },
+    )
+    diabetes_status = _normalize_choice(
+        "diabetes_status",
+        diabetes_status,
+        {
+            "none": "none",
+            "prediabetes": "prediabetes",
+            "type_2": "type_2",
+            "type_1": "type_1",
+            "non-diabetic": "none",
+            "prediabetic": "prediabetes",
+            "type2": "type_2",
+            "type1": "type_1",
+        },
+    )
+    physical_activity = _normalize_choice(
+        "physical_activity",
+        physical_activity,
+        {
+            "none": "none",
+            "light": "light",
+            "moderate": "moderate",
+            "intense": "intense",
+            "active": "intense",
+            "sometimes": "light",
+            "never": "none",
+        },
+    )
 
     total_score = 0
 

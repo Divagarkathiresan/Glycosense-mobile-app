@@ -22,7 +22,7 @@ export function getApiBaseUrl() {
   const isMobile = Platform.OS === 'ios' || Platform.OS === 'android';
   
   if (isMobile) {
-    const url = 'http://192.168.140.217:8080';
+    const url = 'http://192.168.6.217:8080';
     console.log('[mobile] API base URL:', url);
     return url;
   }
